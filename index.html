@@ -9,15 +9,14 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-	<!-- ══════════════════════════════════════════════════════
-		 FIREBASE SDK  (no cambies estas líneas)
-	══════════════════════════════════════════════════════ -->
 	<script type="module">
         import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getFirestore,
             collection, addDoc, onSnapshot,
             query, orderBy, serverTimestamp }
             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL }
+            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
         /* ══════════════════════════════════════════════════════
 		   🔧 PASO 1 — Pega aquí tu configuración de Firebase.
@@ -35,18 +34,20 @@
 
         // ── Init ──────────────────────────────────────────────
         let db = null;
+        let storage = null;
         let firebaseOK = false;
 
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
+            storage = getStorage(app);
             firebaseOK = !firebaseConfig.apiKey.includes("TU_");
         } catch(e) {
             console.warn("Firebase no configurado, usando modo demo local.");
         }
 
         // ── Expose to global scope ────────────────────────────
-        window._firebase = { db, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp };
+        window._firebase = { db, storage, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, ref, uploadBytes, getDownloadURL };
 	</script>
 
 	<style>
@@ -261,6 +262,51 @@
         .leaflet-popup-content { font-family:var(--font-body); font-size:.875rem; }
         .popup-title { font-family:var(--font-head); font-weight:700; font-size:1rem; margin-bottom:.3rem; }
         .popup-meta { color:var(--gray); font-size:.78rem; }
+
+        /* Popup photo strip */
+        .popup-photos { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+        .popup-photo {
+            width:72px; height:60px; object-fit:cover; border-radius:6px;
+            border:2px solid var(--border); cursor:pointer; transition:transform .15s, border-color .15s;
+        }
+        .popup-photo:hover { transform:scale(1.07); border-color:var(--teal); }
+        .popup-no-photo { color:var(--gray); font-size:.75rem; margin-top:6px; font-style:italic; }
+
+        /* LIGHTBOX */
+        .lightbox {
+            position:fixed; inset:0; z-index:9999;
+            background:rgba(0,0,0,.88); backdrop-filter:blur(6px);
+            display:flex; align-items:center; justify-content:center;
+            opacity:0; pointer-events:none; transition:opacity .25s;
+        }
+        .lightbox.show { opacity:1; pointer-events:all; }
+        .lightbox-inner { position:relative; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; align-items:center; gap:12px; }
+        .lightbox img { max-width:90vw; max-height:78vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.7); object-fit:contain; }
+        .lightbox-close {
+            position:absolute; top:-40px; right:0;
+            background:rgba(255,255,255,.15); border:none; color:#fff;
+            width:32px; height:32px; border-radius:50%; font-size:1.1rem;
+            cursor:pointer; display:flex; align-items:center; justify-content:center;
+            transition:background .2s;
+        }
+        .lightbox-close:hover { background:rgba(255,255,255,.3); }
+        .lightbox-thumbs { display:flex; gap:8px; }
+        .lightbox-thumb {
+            width:56px; height:46px; object-fit:cover; border-radius:6px;
+            border:2px solid transparent; cursor:pointer; transition:border-color .15s, opacity .15s;
+            opacity:.6;
+        }
+        .lightbox-thumb.active { border-color:var(--teal); opacity:1; }
+        .lightbox-nav {
+            position:absolute; top:50%; transform:translateY(-50%);
+            background:rgba(255,255,255,.15); border:none; color:#fff;
+            width:40px; height:40px; border-radius:50%; font-size:1.3rem;
+            cursor:pointer; display:flex; align-items:center; justify-content:center;
+            transition:background .2s;
+        }
+        .lightbox-nav:hover { background:rgba(255,255,255,.3); }
+        .lightbox-nav.prev { left:-56px; }
+        .lightbox-nav.next { right:-56px; }
 	</style>
 </head>
 <body>
@@ -285,7 +331,7 @@
 	<div class="hero-grid"></div>
 	<div class="hero-content">
 		<div class="hero-badge">🟢 Plataforma activa en Cúcuta</div>
-		<h1 style="font-family: 'Courier New'">Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
+		<h1 style="font-family: 'Roboto Condensed ExtraLight'">Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
 		<p class="hero-sub">Fotografía el daño, ubícalo en el mapa y envíalo directamente a las autoridades municipales. En tiempo real, compartido con todos los ciudadanos.</p>
 		<div class="hero-actions">
 			<a href="#reporte" class="btn-primary">📸 Reportar un daño</a>
@@ -416,6 +462,17 @@
 	</div>
 </div>
 
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+	<div class="lightbox-inner">
+		<button class="lightbox-close" onclick="closeLightboxBtn()">✕</button>
+		<button class="lightbox-nav prev" id="lb-prev" onclick="lbNav(-1)">‹</button>
+		<img id="lb-img" src="" alt="Foto del reporte"/>
+		<button class="lightbox-nav next" id="lb-next" onclick="lbNav(1)">›</button>
+		<div class="lightbox-thumbs" id="lb-thumbs"></div>
+	</div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast">
 	<span id="toast-icon">ℹ️</span>
@@ -441,7 +498,7 @@
         { id:"RPT-007", type:"Grieta en pavimento", address:"Diagonal Santander, Sector Norte",   severity:"moderado", status:"pending",  lat:7.9070,  lng:-72.5160, desc:"Grieta transversal de 2 m, riesgo vehicular.",    date:"Hace 5 horas"},
     ];
 
-    let allReports = [...SAMPLE];
+    let allReports = [];
     let selectedSeverity = "";
     let userLat = null, userLng = null;
     let map, markersLayer;
@@ -454,6 +511,11 @@
 
         if (!fb.firebaseOK) {
             document.getElementById("setup-banner").classList.add("show");
+            // Solo en modo demo mostramos los reportes de muestra
+            allReports = [...SAMPLE];
+            renderMarkers();
+            renderList();
+            updateStats();
             return;
         }
 
@@ -474,10 +536,24 @@
         });
     }
 
-    async function saveToFirebase(report) {
+    async function uploadPhotos(files) {
         const fb = window._firebase;
+        if (!fb.storage || !files.length) return [];
+        const urls = await Promise.all(files.map(async file => {
+            const path = `reportes/${Date.now()}_${file.name}`;
+            const storageRef = fb.ref(fb.storage, path);
+            await fb.uploadBytes(storageRef, file);
+            return await fb.getDownloadURL(storageRef);
+        }));
+        return urls;
+    }
+
+    async function saveToFirebase(report, photoFiles) {
+        const fb = window._firebase;
+        const photoUrls = await uploadPhotos(photoFiles);
         const docRef = await fb.addDoc(fb.collection(fb.db, "reportes"), {
             ...report,
+            photos: photoUrls,
             timestamp: fb.serverTimestamp()
         });
         return docRef.id;
@@ -517,13 +593,27 @@
             if (!r.lat || !r.lng) return;
             const color = SEVER_COLOR[r.severity] || "#8BA5BA";
             const m = L.marker([r.lat, r.lng], { icon: makeIcon(color) });
+
+            // Build photo strip HTML
+            let photosHtml = "";
+            if (r.photos && r.photos.length) {
+                const thumbs = r.photos.map((url, i) =>
+                    `<img class="popup-photo" src="${url}" alt="foto ${i+1}"
+                          onclick="openLightbox(${JSON.stringify(r.photos)}, ${i})" />`
+                ).join("");
+                photosHtml = `<div class="popup-photos">${thumbs}</div>`;
+            } else {
+                photosHtml = `<p class="popup-no-photo">📷 Sin fotos adjuntas</p>`;
+            }
+
             m.bindPopup(`
       <div class="popup-title">${r.type}</div>
       <div class="popup-meta">📍 ${r.address}</div>
       <div class="popup-meta" style="margin-top:4px;">⚠️ ${r.severity} · ${STATUS_LABEL[r.status] || "Pendiente"}</div>
       <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;">${r.desc || ""}</div>
       <div class="popup-meta" style="margin-top:4px;">🕐 ${r.date}</div>
-    `);
+      ${photosHtml}
+    `, { maxWidth: 300 });
             m.addTo(markersLayer);
         });
     }
@@ -550,6 +640,48 @@
         map.flyTo([lat, lng], 16, { duration:1 });
         document.getElementById("mapa").scrollIntoView({ behavior:"smooth" });
     }
+
+    // ─── LIGHTBOX ────────────────────────────────────────────────────────────────
+    let lbPhotos = [], lbIndex = 0;
+
+    function openLightbox(photos, index) {
+        lbPhotos = photos;
+        lbIndex = index;
+        renderLightbox();
+        document.getElementById("lightbox").classList.add("show");
+    }
+
+    function renderLightbox() {
+        document.getElementById("lb-img").src = lbPhotos[lbIndex];
+        document.getElementById("lb-prev").style.display = lbPhotos.length > 1 ? "flex" : "none";
+        document.getElementById("lb-next").style.display = lbPhotos.length > 1 ? "flex" : "none";
+        const thumbsEl = document.getElementById("lb-thumbs");
+        thumbsEl.innerHTML = lbPhotos.map((url, i) =>
+            `<img class="lightbox-thumb ${i===lbIndex?'active':''}" src="${url}" onclick="lbNav(${i - lbIndex})" />`
+        ).join("");
+    }
+
+    function lbNav(delta) {
+        lbIndex = (lbIndex + delta + lbPhotos.length) % lbPhotos.length;
+        renderLightbox();
+    }
+
+    function closeLightbox(e) {
+        if (e.target === document.getElementById("lightbox"))
+            document.getElementById("lightbox").classList.remove("show");
+    }
+
+    function closeLightboxBtn() {
+        document.getElementById("lightbox").classList.remove("show");
+    }
+
+    document.addEventListener("keydown", e => {
+        const lb = document.getElementById("lightbox");
+        if (!lb.classList.contains("show")) return;
+        if (e.key === "ArrowRight") lbNav(1);
+        if (e.key === "ArrowLeft")  lbNav(-1);
+        if (e.key === "Escape")     lb.classList.remove("show");
+    });
 
     // ─── STATS ───────────────────────────────────────────────────────────────────
     function updateStats() {
@@ -632,6 +764,10 @@
         const btn = document.getElementById("submit-btn");
         btn.disabled = true; btn.innerHTML = "⏳ Guardando en base de datos...";
 
+        // Collect selected photo files
+        const photoInput = document.getElementById("photo-input");
+        const photoFiles = photoInput.files ? Array.from(photoInput.files).slice(0, 5) : [];
+
         const newReport = {
             type:     document.getElementById("damage-type").value,
             address:  document.getElementById("address").value,
@@ -647,17 +783,23 @@
         let docId;
         if (firebaseReady) {
             try {
-                docId = await saveToFirebase(newReport);
+                if (photoFiles.length) {
+                    btn.innerHTML = `⏳ Subiendo ${photoFiles.length} foto(s)...`;
+                }
+                docId = await saveToFirebase(newReport, photoFiles);
                 document.getElementById("modal-db-note").textContent = "✅ Guardado en Firebase — todos los usuarios lo verán al instante";
             } catch(err) {
+                console.error(err);
                 showToast("❌","Error al guardar en Firebase. Revisa las reglas de seguridad.");
                 btn.disabled = false; btn.innerHTML = "📤 Enviar reporte a la base de datos";
                 return;
             }
         } else {
-            // Local fallback
+            // Local fallback — use object URLs for demo preview
             docId = "LOCAL-" + Date.now();
+            const localPhotos = photoFiles.map(f => URL.createObjectURL(f));
             newReport.id = docId;
+            newReport.photos = localPhotos;
             allReports.unshift(newReport);
             renderMarkers();
             renderList(true);
