@@ -285,7 +285,7 @@
 	<div class="hero-grid"></div>
 	<div class="hero-content">
 		<div class="hero-badge">🟢 Plataforma activa en Cúcuta</div>
-		<h1>Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
+		<h1 style="font-family: 'Courier New'">Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
 		<p class="hero-sub">Fotografía el daño, ubícalo en el mapa y envíalo directamente a las autoridades municipales. En tiempo real, compartido con todos los ciudadanos.</p>
 		<div class="hero-actions">
 			<a href="#reporte" class="btn-primary">📸 Reportar un daño</a>
@@ -397,23 +397,11 @@
 	</div>
 </section>
 
-<!-- FOOTER + SETUP GUIDE -->
+<!-- FOOTER -->
 <footer>
 	<p>Hecho con 💙 por <strong>Maikol A. Rodriguez Ovalle</strong> · Ingeniería de Sistemas, UDES Cúcuta · 2026</p>
 	<p style="margin-top:.4rem;font-size:.78rem;opacity:.7;">Proyecto Integrador I — Plataforma Digital para el Reporte de Daños en Vías</p>
 
-	<div style="margin-top:2rem;background:rgba(14,124,134,.08);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:720px;margin-left:auto;margin-right:auto;text-align:left;">
-		<h3 style="font-family:var(--font-head);color:var(--gold);margin-bottom:1rem;">⚙️ Cómo conectar tu base de datos Firebase</h3>
-		<div style="color:var(--gray);font-size:.875rem;line-height:1.8;">
-			<p><strong style="color:var(--white);">Paso 1.</strong> Ve a <a href="https://console.firebase.google.com" target="_blank" style="color:var(--teal-light);">console.firebase.google.com</a> e inicia sesión con Google.</p>
-			<p><strong style="color:var(--white);">Paso 2.</strong> Crea un nuevo proyecto — ponle el nombre que quieras, ej: <code style="background:rgba(255,255,255,.08);padding:.1rem .4rem;border-radius:4px;color:var(--teal-light);">vias-cucuta</code></p>
-			<p><strong style="color:var(--white);">Paso 3.</strong> En el menú lateral → <strong style="color:var(--white);">Firestore Database</strong> → <em>Crear base de datos</em> → modo de prueba.</p>
-			<p><strong style="color:var(--white);">Paso 4.</strong> En Configuración del proyecto (⚙️) → <em>Tus aplicaciones</em> → agrega una app Web (icono &lt;/&gt;). Copia el objeto <code style="background:rgba(255,255,255,.08);padding:.1rem .4rem;border-radius:4px;color:var(--teal-light);">firebaseConfig</code>.</p>
-			<p><strong style="color:var(--white);">Paso 5.</strong> Abre este archivo HTML, busca <code style="background:rgba(255,255,255,.08);padding:.1rem .4rem;border-radius:4px;color:var(--teal-light);">const firebaseConfig = {</code> cerca del inicio y reemplaza los valores <code style="background:rgba(255,255,255,.08);padding:.1rem .4rem;border-radius:4px;color:var(--gold);">TU_API_KEY</code>, etc. con los que copiaste.</p>
-			<p><strong style="color:var(--white);">Paso 6.</strong> Guarda y abre el archivo. El badge en la barra de navegación cambiará a 🟢 <strong style="color:var(--green);">Firebase conectado</strong>.</p>
-			<p style="margin-top:.8rem;padding:.8rem;background:rgba(39,174,96,.08);border-radius:8px;border-left:3px solid var(--green);">✅ Listo — todos los usuarios que abran esta página verán y compartirán los mismos reportes en tiempo real.</p>
-		</div>
-	</div>
 </footer>
 
 <!-- MODAL -->
