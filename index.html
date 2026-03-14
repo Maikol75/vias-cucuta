@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+	<!DOCTYPE html>
 <html lang="es">
 <head>
 	<meta charset="UTF-8"/>
@@ -15,8 +15,7 @@
             collection, addDoc, onSnapshot,
             query, orderBy, serverTimestamp }
             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL }
-            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
 
         /* ══════════════════════════════════════════════════════
 		   🔧 PASO 1 — Pega aquí tu configuración de Firebase.
@@ -40,14 +39,13 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            storage = getStorage(app);
             firebaseOK = !firebaseConfig.apiKey.includes("TU_");
         } catch(e) {
             console.warn("Firebase no configurado, usando modo demo local.");
         }
 
         // ── Expose to global scope ────────────────────────────
-        window._firebase = { db, storage, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, ref, uploadBytes, getDownloadURL };
+        window._firebase = { db, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp};
 	</script>
 
 	<style>
@@ -327,7 +325,6 @@
 
 <!-- HERO -->
 <section id="inicio">
-	<div class="hero-bg"></div>
 	<div class="hero-grid"></div>
 	<div class="hero-content">
 		<div class="hero-badge">🟢 Plataforma activa en Cúcuta</div>
@@ -536,14 +533,24 @@
         });
     }
 
+    // ── Cloudinary config ──────────────────────────────────
+    const CLOUDINARY_CLOUD  = 'denpau9b7';  // ← pon tu Cloud name
+    const CLOUDINARY_PRESET = 'vias_cucuta';
+    // ───────────────────────────────────────────────────────
+
     async function uploadPhotos(files) {
-        const fb = window._firebase;
-        if (!fb.storage || !files.length) return [];
+        if (!files.length) return [];
         const urls = await Promise.all(files.map(async file => {
-            const path = `reportes/${Date.now()}_${file.name}`;
-            const storageRef = fb.ref(fb.storage, path);
-            await fb.uploadBytes(storageRef, file);
-            return await fb.getDownloadURL(storageRef);
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', CLOUDINARY_PRESET);
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (!data.secure_url) throw new Error('Error subiendo foto');
+            return data.secure_url;
         }));
         return urls;
     }
