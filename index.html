@@ -1,4 +1,4 @@
-	<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 	<meta charset="UTF-8"/>
@@ -9,17 +9,20 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+	<!-- ══════════════════════════════════════════════════════
+		 FIREBASE SDK
+	══════════════════════════════════════════════════════ -->
 	<script type="module">
         import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getFirestore,
             collection, addDoc, onSnapshot,
             query, orderBy, serverTimestamp }
             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+        import { getStorage, ref, uploadBytes, getDownloadURL }
+            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
         /* ══════════════════════════════════════════════════════
-		   🔧 PASO 1 — Pega aquí tu configuración de Firebase.
-		   Instrucciones al final del archivo.
+		   Firebase
 		══════════════════════════════════════════════════════ */
         const firebaseConfig = {
             apiKey: "AIzaSyAW15yvAjBHQR068JguNhaL_Tmtzoovmio",
@@ -39,13 +42,14 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
+            storage = getStorage(app);
             firebaseOK = !firebaseConfig.apiKey.includes("TU_");
         } catch(e) {
             console.warn("Firebase no configurado, usando modo demo local.");
         }
 
         // ── Expose to global scope ────────────────────────────
-        window._firebase = { db, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp};
+        window._firebase = { db, storage, firebaseOK, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, ref, uploadBytes, getDownloadURL };
 	</script>
 
 	<style>
@@ -319,16 +323,17 @@
 	</div>
 	<div style="display:flex;align-items:center;gap:.75rem;">
 		<div class="db-badge offline" id="db-badge">Demo local</div>
-		<a href="#reporte" class="nav-cta">+ Reportar</a>
+		<a href="admin.html" class="nav-cta" style="background:var(--navy2);border:1px solid var(--border);color:var(--gray);margin-right:.4rem;">🛠️ Operador</a><a href="#reporte" class="nav-cta">+ Reportar</a>
 	</div>
 </nav>
 
 <!-- HERO -->
 <section id="inicio">
+	<div class="hero-bg"></div>
 	<div class="hero-grid"></div>
 	<div class="hero-content">
 		<div class="hero-badge">🟢 Plataforma activa en Cúcuta</div>
-		<h1 style="font-family: 'Roboto Condensed ExtraLight'">Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
+		<h1 style="font-family: 'Courier New'">Reporta daños viales.<br/><span>Tu ciudad</span> te <em>escucha.</em></h1>
 		<p class="hero-sub">Fotografía el daño, ubícalo en el mapa y envíalo directamente a las autoridades municipales. En tiempo real, compartido con todos los ciudadanos.</p>
 		<div class="hero-actions">
 			<a href="#reporte" class="btn-primary">📸 Reportar un daño</a>
@@ -533,24 +538,14 @@
         });
     }
 
-    // ── Cloudinary config ──────────────────────────────────
-    const CLOUDINARY_CLOUD  = 'denpau9b7';  // ← pon tu Cloud name
-    const CLOUDINARY_PRESET = 'vias_cucuta';
-    // ───────────────────────────────────────────────────────
-
     async function uploadPhotos(files) {
-        if (!files.length) return [];
+        const fb = window._firebase;
+        if (!fb.storage || !files.length) return [];
         const urls = await Promise.all(files.map(async file => {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('upload_preset', CLOUDINARY_PRESET);
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (!data.secure_url) throw new Error('Error subiendo foto');
-            return data.secure_url;
+            const path = `reportes/${Date.now()}_${file.name}`;
+            const storageRef = fb.ref(fb.storage, path);
+            await fb.uploadBytes(storageRef, file);
+            return await fb.getDownloadURL(storageRef);
         }));
         return urls;
     }
