@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+	<title>VíasCúcuta — Panel Operador</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com"/>
+	<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+	<script type="module">
+        import { initializeApp }     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc }
+            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAW15yvAjBHQR068JguNhaL_Tmtzoovmio",
+            authDomain: "vias-cucuta.firebaseapp.com",
+            projectId: "vias-cucuta",
+            storageBucket: "vias-cucuta.firebasestorage.app",
+            messagingSenderId: "1002872048654",
+            appId: "1:1002872048654:web:e673afed3fc382ef80c05f"
+        };
+
+        const app  = initializeApp(firebaseConfig);
+        const db   = getFirestore(app);
+        const auth = getAuth(app);
+
+        window._db      = db;
+        window._auth    = auth;
+        window._fns     = { collection, onSnapshot, query, orderBy, doc, updateDoc };
+        window._authFns = { signInWithEmailAndPassword, signOut, onAuthStateChanged };
+	</script>
+
+	<style>
+        :root {
+            --navy:   #0A1628; --navy2: #0D2137; --card: #132840;
+            --teal:   #0E7C86; --teal-light: #13A3B0;
+            --gold:   #F0A500; --coral: #E05C4A; --green: #27AE60;
+            --white:  #FFFFFF; --gray: #8BA5BA;
+            --border: rgba(14,124,134,0.25);
+            --font-head: 'Syne', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:var(--navy); color:var(--white); font-family:var(--font-body); min-height:100vh; }
+
+        /* NAV */
+        nav {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 2rem; height:64px;
+            background:rgba(10,22,40,.95); border-bottom:1px solid var(--border);
+            position:sticky; top:0; z-index:100;
+        }
+        .nav-logo { font-family:var(--font-head); font-weight:800; font-size:1.1rem; display:flex; align-items:center; gap:.5rem; }
+        .nav-logo span { color:var(--teal); }
+        .nav-logo em   { color:var(--gold); font-style:normal; }
+        .nav-back { color:var(--gray); text-decoration:none; font-size:.85rem; font-weight:600; display:flex; align-items:center; gap:.4rem; padding:.4rem .9rem; border-radius:8px; border:1px solid var(--border); transition:all .2s; }
+        .nav-back:hover { color:var(--white); border-color:var(--teal); background:var(--card); }
+
+        /* LAYOUT */
+        .wrapper { max-width:1200px; margin:0 auto; padding:2rem; }
+
+        /* HEADER */
+        .page-header { margin-bottom:2rem; }
+        .page-header h1 { font-family:var(--font-head); font-size:2rem; font-weight:800; }
+        .page-header p  { color:var(--gray); margin-top:.3rem; }
+
+        /* STATS */
+        .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:2rem; }
+        @media(max-width:700px){ .stats { grid-template-columns:repeat(2,1fr); } }
+        .stat-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:1.2rem 1.5rem; }
+        .stat-card .n { font-family:var(--font-head); font-size:2rem; font-weight:800; }
+        .stat-card .l { color:var(--gray); font-size:.8rem; margin-top:.2rem; }
+
+        /* FILTERS */
+        .filters { display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1.5rem; align-items:center; }
+        .filter-label { color:var(--gray); font-size:.8rem; font-weight:600; }
+        .filter-btn { background:transparent; border:1px solid var(--border); color:var(--gray); padding:.35rem .9rem; border-radius:99px; cursor:pointer; font-family:var(--font-body); font-size:.82rem; font-weight:500; transition:all .2s; }
+        .filter-btn:hover { border-color:var(--teal); color:var(--white); }
+        .filter-btn.active { background:rgba(14,124,134,.2); border-color:var(--teal); color:var(--teal-light); font-weight:700; }
+        .filter-sep { width:1px; height:20px; background:var(--border); }
+
+        /* TABLE */
+        .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+        table { width:100%; border-collapse:collapse; }
+        thead th { padding:.85rem 1.2rem; text-align:left; font-size:.75rem; font-weight:700; color:var(--gray); letter-spacing:.05em; text-transform:uppercase; background:rgba(255,255,255,.03); border-bottom:1px solid var(--border); }
+        tbody tr { border-bottom:1px solid rgba(255,255,255,.05); cursor:pointer; transition:background .15s; }
+        tbody tr:last-child { border-bottom:none; }
+        tbody tr:hover { background:rgba(14,124,134,.07); }
+        tbody td { padding:.85rem 1.2rem; font-size:.875rem; vertical-align:middle; }
+        .td-type  { font-weight:600; }
+        .td-addr  { color:var(--gray); font-size:.82rem; }
+        .td-date  { color:var(--gray); font-size:.8rem; }
+
+        /* BADGES */
+        .badge { display:inline-flex; align-items:center; padding:.25rem .7rem; border-radius:99px; font-size:.75rem; font-weight:700; border:1px solid; }
+        .badge-pending  { color:var(--gold);       background:rgba(240,165,0,.12);  border-color:rgba(240,165,0,.3); }
+        .badge-progress { color:var(--teal-light); background:rgba(14,124,134,.12); border-color:rgba(14,124,134,.3); }
+        .badge-done     { color:var(--green);       background:rgba(39,174,96,.12);  border-color:rgba(39,174,96,.3); }
+        .badge-critico  { color:var(--coral);       background:rgba(224,92,74,.12);  border-color:rgba(224,92,74,.3); }
+        .badge-moderado { color:var(--gold);        background:rgba(240,165,0,.12);  border-color:rgba(240,165,0,.3); }
+        .badge-leve     { color:var(--green);       background:rgba(39,174,96,.12);  border-color:rgba(39,174,96,.3); }
+
+        .photos-count { display:inline-flex; align-items:center; gap:.3rem; color:var(--gray); font-size:.8rem; }
+
+        /* EMPTY */
+        .empty { text-align:center; padding:3rem; color:var(--gray); }
+
+        /* MODAL */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:1000; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s; backdrop-filter:blur(4px); }
+        .modal-overlay.show { opacity:1; pointer-events:all; }
+        .modal { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:2rem; width:90%; max-width:600px; max-height:85vh; overflow-y:auto; transform:scale(.96); transition:transform .25s; }
+        .modal-overlay.show .modal { transform:scale(1); }
+        .modal::-webkit-scrollbar { width:4px; }
+        .modal::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem; }
+        .modal-title  { font-family:var(--font-head); font-size:1.4rem; font-weight:800; }
+        .modal-close  { background:rgba(255,255,255,.08); border:none; color:var(--white); width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:background .2s; flex-shrink:0; }
+        .modal-close:hover { background:rgba(255,255,255,.18); }
+        .modal-badges { display:flex; gap:.6rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+        .modal-section { margin-bottom:1.2rem; }
+        .modal-label  { font-size:.75rem; font-weight:700; color:var(--gray); letter-spacing:.05em; text-transform:uppercase; margin-bottom:.4rem; }
+        .modal-value  { font-size:.95rem; color:#D4E4F0; line-height:1.5; }
+
+        /* PHOTO GALLERY */
+        .photo-grid { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.5rem; }
+        .photo-grid img { width:120px; height:90px; object-fit:cover; border-radius:8px; border:2px solid var(--border); cursor:pointer; transition:transform .15s, border-color .15s; }
+        .photo-grid img:hover { transform:scale(1.04); border-color:var(--teal); }
+
+        /* STATUS ACTIONS */
+        .status-actions { display:flex; gap:.75rem; flex-wrap:wrap; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid var(--border); }
+        .status-btn { flex:1; min-width:120px; padding:.7rem 1rem; border-radius:10px; border:2px solid; cursor:pointer; font-family:var(--font-body); font-size:.875rem; font-weight:700; transition:all .2s; background:transparent; }
+        .status-btn.pending  { border-color:rgba(240,165,0,.5);  color:var(--gold);       }
+        .status-btn.progress { border-color:rgba(14,124,134,.5); color:var(--teal-light); }
+        .status-btn.done     { border-color:rgba(39,174,96,.5);  color:var(--green);      }
+        .status-btn:hover    { opacity:.8; transform:translateY(-1px); }
+        .status-btn.current  { opacity:.4; cursor:default; transform:none; }
+
+        /* LIGHTBOX */
+        .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:2000; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
+        .lightbox.show { opacity:1; pointer-events:all; }
+        .lightbox img { max-width:90vw; max-height:85vh; border-radius:10px; object-fit:contain; }
+        .lightbox-close { position:fixed; top:1.5rem; right:1.5rem; background:rgba(255,255,255,.15); border:none; color:#fff; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+        /* TOAST */
+        .toast { position:fixed; bottom:2rem; right:2rem; z-index:3000; background:var(--navy2); border:1px solid var(--border); border-radius:12px; padding:.9rem 1.3rem; display:flex; align-items:center; gap:.75rem; font-size:.875rem; font-weight:500; transform:translateY(120%); transition:transform .3s; box-shadow:0 8px 32px rgba(0,0,0,.4); }
+        .toast.show { transform:translateY(0); }
+
+        /* LOGIN */
+        .login-screen {
+            min-height:100vh; display:flex; align-items:center; justify-content:center;
+            background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(14,124,134,.18) 0%, transparent 70%), var(--navy);
+        }
+        .login-box {
+            background:var(--card); border:1px solid var(--border); border-radius:20px;
+            padding:2.5rem; width:90%; max-width:400px; box-shadow:0 20px 60px rgba(0,0,0,.4);
+        }
+        .login-logo { text-align:center; margin-bottom:2rem; }
+        .login-logo h1 { font-family:var(--font-head); font-size:1.6rem; font-weight:800; }
+        .login-logo h1 span { color:var(--teal); }
+        .login-logo h1 em   { color:var(--gold); font-style:normal; }
+        .login-logo p { color:var(--gray); font-size:.875rem; margin-top:.4rem; }
+        .login-group { margin-bottom:1.2rem; }
+        .login-group label { display:block; font-size:.8rem; font-weight:700; color:var(--gray); letter-spacing:.04em; text-transform:uppercase; margin-bottom:.5rem; }
+        .login-group input {
+            width:100%; background:rgba(255,255,255,.05); border:1px solid var(--border);
+            border-radius:10px; padding:.75rem 1rem; color:var(--white);
+            font-family:var(--font-body); font-size:.95rem; outline:none; transition:border-color .2s;
+        }
+        .login-group input:focus { border-color:var(--teal); box-shadow:0 0 0 3px rgba(14,124,134,.2); }
+        .login-btn {
+            width:100%; background:var(--teal); color:var(--white); border:none;
+            padding:1rem; border-radius:12px; cursor:pointer; font-family:var(--font-head);
+            font-size:1rem; font-weight:700; transition:all .2s; margin-top:.5rem;
+        }
+        .login-btn:hover { background:var(--teal-light); transform:translateY(-1px); }
+        .login-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+        .login-error { color:var(--coral); font-size:.85rem; margin-top:.8rem; text-align:center; min-height:1.2rem; }
+
+        /* NAV USER */
+        .nav-user { display:flex; align-items:center; gap:.75rem; }
+        .nav-email { font-size:.8rem; color:var(--gray); }
+        .logout-btn { background:transparent; border:1px solid var(--border); color:var(--gray); padding:.35rem .9rem; border-radius:8px; cursor:pointer; font-family:var(--font-body); font-size:.82rem; font-weight:600; transition:all .2s; }
+        .logout-btn:hover { border-color:var(--coral); color:var(--coral); }
+	</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="login-screen">
+	<div class="login-box">
+		<div class="login-logo">
+			<div style="font-size:2.5rem;margin-bottom:.5rem;">🛠️</div>
+			<h1>Panel <span>Vías</span><em>Cúcuta</em></h1>
+			<p>Acceso exclusivo para operadores autorizados</p>
+		</div>
+		<div class="login-group">
+			<label>Correo electrónico</label>
+			<input type="email" id="login-email" placeholder="operador@correo.com" autocomplete="email"/>
+		</div>
+		<div class="login-group">
+			<label>Contraseña</label>
+			<input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"/>
+		</div>
+		<button class="login-btn" id="login-btn" onclick="doLogin()">🔐 Ingresar al panel</button>
+		<p class="login-error" id="login-error"></p>
+	</div>
+</div>
+
+<!-- PANEL (oculto hasta autenticar) -->
+<div id="panel" style="display:none;">
+
+	<nav>
+		<div class="nav-logo">🛠️ <span>Panel</span><em>Operador</em></div>
+		<div class="nav-user">
+			<span class="nav-email" id="nav-email"></span>
+			<a href="index.html" class="nav-back">← Mapa público</a>
+			<button class="logout-btn" onclick="doLogout()">Cerrar sesión</button>
+		</div>
+	</nav>
+
+	<div class="wrapper">
+		<div class="page-header">
+			<h1>Panel de Operador</h1>
+			<p>Gestiona y actualiza el estado de los reportes ciudadanos en tiempo real</p>
+		</div>
+
+		<!-- STATS -->
+		<div class="stats">
+			<div class="stat-card">
+				<div class="n" id="s-total">—</div>
+				<div class="l">Reportes totales</div>
+			</div>
+			<div class="stat-card">
+				<div class="n" style="color:var(--gold)" id="s-pending">—</div>
+				<div class="l">Pendientes</div>
+			</div>
+			<div class="stat-card">
+				<div class="n" style="color:var(--teal-light)" id="s-progress">—</div>
+				<div class="l">En proceso</div>
+			</div>
+			<div class="stat-card">
+				<div class="n" style="color:var(--green)" id="s-done">—</div>
+				<div class="l">Resueltos</div>
+			</div>
+		</div>
+
+		<!-- FILTERS -->
+		<div class="filters">
+			<span class="filter-label">Severidad:</span>
+			<button class="filter-btn active" data-sev="todos">Todos</button>
+			<button class="filter-btn" data-sev="critico">🔴 Crítico</button>
+			<button class="filter-btn" data-sev="moderado">🟠 Moderado</button>
+			<button class="filter-btn" data-sev="leve">🟡 Leve</button>
+			<div class="filter-sep"></div>
+			<span class="filter-label">Estado:</span>
+			<button class="filter-btn active" data-status="todos">Todos</button>
+			<button class="filter-btn" data-status="pending">Pendiente</button>
+			<button class="filter-btn" data-status="progress">En proceso</button>
+			<button class="filter-btn" data-status="done">Resuelto</button>
+		</div>
+
+		<!-- TABLE -->
+		<div class="table-wrap">
+			<table>
+				<thead>
+				<tr>
+					<th>Tipo de daño</th>
+					<th>Dirección</th>
+					<th>Severidad</th>
+					<th>Estado</th>
+					<th>Fotos</th>
+					<th>Fecha</th>
+					<th>Reportado por</th>
+				</tr>
+				</thead>
+				<tbody id="tabla-body">
+				<tr><td colspan="7" class="empty">Cargando reportes...</td></tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<!-- MODAL DETALLE -->
+	<div class="modal-overlay" id="modal">
+		<div class="modal">
+			<div class="modal-header">
+				<div class="modal-title" id="m-title">—</div>
+				<button class="modal-close" onclick="closeModal()">✕</button>
+			</div>
+			<div class="modal-badges" id="m-badges"></div>
+
+			<div class="modal-section">
+				<div class="modal-label">📍 Dirección</div>
+				<div class="modal-value" id="m-addr">—</div>
+			</div>
+			<div class="modal-section">
+				<div class="modal-label">📝 Descripción</div>
+				<div class="modal-value" id="m-desc">—</div>
+			</div>
+			<div class="modal-section">
+				<div class="modal-label">👤 Reportado por</div>
+				<div class="modal-value" id="m-reporter">—</div>
+			</div>
+			<div class="modal-section">
+				<div class="modal-label">📌 Coordenadas</div>
+				<div class="modal-value" id="m-coords">—</div>
+			</div>
+			<div class="modal-section" id="m-photos-section">
+				<div class="modal-label">📷 Fotos</div>
+				<div class="photo-grid" id="m-photos"></div>
+			</div>
+
+			<div class="status-actions">
+				<button class="status-btn pending"  id="btn-pending"  onclick="setStatus('pending')">⏳ Pendiente</button>
+				<button class="status-btn progress" id="btn-progress" onclick="setStatus('progress')">🔧 En proceso</button>
+				<button class="status-btn done"     id="btn-done"     onclick="setStatus('done')">✅ Resuelto</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- LIGHTBOX -->
+	<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+		<button class="lightbox-close" onclick="closeLightbox()">✕</button>
+		<img id="lb-img" src="" alt="foto"/>
+	</div>
+
+	<!-- TOAST -->
+	<div class="toast" id="toast">
+		<span id="toast-icon">✅</span>
+		<span id="toast-msg">Estado actualizado</span>
+	</div>
+
+</div> <!-- /panel -->
+
+<script>
+    const SEV_LABEL   = { critico:'🔴 Crítico', moderado:'🟠 Moderado', leve:'🟡 Leve' };
+    const STATUS_LABEL= { pending:'Pendiente', progress:'En proceso', done:'Resuelto' };
+
+    let allReports = [];
+    let filtroSev    = 'todos';
+    let filtroStatus = 'todos';
+    let currentId    = null;
+    let firestoreUnsub = null;
+
+    // ── AUTH ─────────────────────────────────────────────────────────────────────
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            const auth     = window._auth;
+            const authFns  = window._authFns;
+            if (!auth) return;
+
+            authFns.onAuthStateChanged(auth, user => {
+                if (user) {
+                    showPanel(user);
+                } else {
+                    showLogin();
+                }
+            });
+        }, 600);
+    });
+
+    function showPanel(user) {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('panel').style.display = 'block';
+        document.getElementById('nav-email').textContent = user.email;
+        startFirestore();
+    }
+
+    function showLogin() {
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('panel').style.display = 'none';
+        if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    }
+
+    async function doLogin() {
+        const email = document.getElementById('login-email').value.trim();
+        const pass  = document.getElementById('login-pass').value;
+        const btn   = document.getElementById('login-btn');
+        const err   = document.getElementById('login-error');
+
+        if (!email || !pass) { err.textContent = 'Completa todos los campos.'; return; }
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Verificando...';
+        err.textContent = '';
+
+        try {
+            await window._authFns.signInWithEmailAndPassword(window._auth, email, pass);
+        } catch(e) {
+            const msgs = {
+                'auth/user-not-found':  'Usuario no encontrado.',
+                'auth/wrong-password':  'Contraseña incorrecta.',
+                'auth/invalid-email':   'Correo inválido.',
+                'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
+            };
+            err.textContent = msgs[e.code] || 'Error al iniciar sesión.';
+            btn.disabled = false;
+            btn.textContent = '🔐 Ingresar al panel';
+        }
+    }
+
+    async function doLogout() {
+        await window._authFns.signOut(window._auth);
+    }
+
+    // Enter key en login
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+            doLogin();
+        }
+    });
+
+    // ── Firestore listener ───────────────────────────────────────────────────────
+    function startFirestore() {
+        const db  = window._db;
+        const fns = window._fns;
+        if (!db) return;
+        const q = fns.query(fns.collection(db, 'reportes'), fns.orderBy('timestamp', 'desc'));
+        firestoreUnsub = fns.onSnapshot(q, snap => {
+            allReports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            updateStats();
+            renderTable();
+        });
+    }
+
+    // ── Stats ────────────────────────────────────────────────────────────────────
+    function updateStats() {
+        document.getElementById('s-total').textContent    = allReports.length;
+        document.getElementById('s-pending').textContent  = allReports.filter(r => r.status === 'pending').length;
+        document.getElementById('s-progress').textContent = allReports.filter(r => r.status === 'progress').length;
+        document.getElementById('s-done').textContent     = allReports.filter(r => r.status === 'done').length;
+    }
+
+    // ── Table ────────────────────────────────────────────────────────────────────
+    function renderTable() {
+        const filtered = allReports.filter(r => {
+            const okSev    = filtroSev    === 'todos' || r.severity === filtroSev;
+            const okStatus = filtroStatus === 'todos' || r.status   === filtroStatus;
+            return okSev && okStatus;
+        });
+
+        const tbody = document.getElementById('tabla-body');
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay reportes con estos filtros.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(r => `
+            <tr onclick="openModal('${r.id}')">
+                <td class="td-type">${r.type}</td>
+                <td class="td-addr">${r.address}</td>
+                <td><span class="badge badge-${r.severity}">${SEV_LABEL[r.severity] || r.severity}</span></td>
+                <td><span class="badge badge-${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
+                <td>
+                    ${r.photos && r.photos.length
+            ? `<span class="photos-count">📷 ${r.photos.length}</span>`
+            : `<span style="color:var(--gray);font-size:.8rem;">—</span>`}
+                </td>
+                <td class="td-date">${r.date || 'Hace un momento'}</td>
+                <td class="td-date">${r.reporter || 'Anónimo'}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ── Filters ──────────────────────────────────────────────────────────────────
+    document.querySelectorAll('[data-sev]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-sev]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filtroSev = btn.dataset.sev;
+            renderTable();
+        });
+    });
+
+    document.querySelectorAll('[data-status]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filtroStatus = btn.dataset.status;
+            renderTable();
+        });
+    });
+
+    // ── Modal ────────────────────────────────────────────────────────────────────
+    function openModal(id) {
+        const r = allReports.find(x => x.id === id);
+        if (!r) return;
+        currentId = id;
+
+        document.getElementById('m-title').textContent    = r.type;
+        document.getElementById('m-addr').textContent     = r.address;
+        document.getElementById('m-desc').textContent     = r.desc || '—';
+        document.getElementById('m-reporter').textContent = r.reporter || 'Ciudadano anónimo';
+        document.getElementById('m-coords').textContent   = r.lat && r.lng ? `${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}` : '—';
+
+        document.getElementById('m-badges').innerHTML =
+            `<span class="badge badge-${r.severity}">${SEV_LABEL[r.severity] || r.severity}</span>
+             <span class="badge badge-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>`;
+
+        // Fotos
+        const photosSection = document.getElementById('m-photos-section');
+        const photosGrid    = document.getElementById('m-photos');
+        if (r.photos && r.photos.length) {
+            photosSection.style.display = 'block';
+            photosGrid.innerHTML = r.photos.map(url =>
+                `<img src="${url}" alt="foto" onclick="openLightbox('${url}')" />`
+            ).join('');
+        } else {
+            photosSection.style.display = 'none';
+        }
+
+        // Botones de estado — resalta el actual
+        ['pending','progress','done'].forEach(s => {
+            document.getElementById('btn-'+s).classList.toggle('current', r.status === s);
+        });
+
+        document.getElementById('modal').classList.add('show');
+    }
+
+    function closeModal() {
+        document.getElementById('modal').classList.remove('show');
+        currentId = null;
+    }
+
+    document.getElementById('modal').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal')) closeModal();
+    });
+
+    // ── Update status ────────────────────────────────────────────────────────────
+    async function setStatus(newStatus) {
+        if (!currentId) return;
+        const db  = window._db;
+        const fns = window._fns;
+        try {
+            await fns.updateDoc(fns.doc(db, 'reportes', currentId), { status: newStatus });
+            showToast('✅', `Estado actualizado a "${STATUS_LABEL[newStatus]}"`);
+            closeModal();
+        } catch(e) {
+            showToast('❌', 'Error al actualizar el estado');
+        }
+    }
+
+    // ── Lightbox ─────────────────────────────────────────────────────────────────
+    function openLightbox(url) {
+        document.getElementById('lb-img').src = url;
+        document.getElementById('lightbox').classList.add('show');
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('show');
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeModal(); closeLightbox(); }
+    });
+
+    // ── Toast ────────────────────────────────────────────────────────────────────
+    function showToast(icon, msg) {
+        document.getElementById('toast-icon').textContent = icon;
+        document.getElementById('toast-msg').textContent  = msg;
+        const t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+</script>
+</body>
+</html>
