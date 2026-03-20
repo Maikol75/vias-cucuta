@@ -758,14 +758,14 @@
             }
 
             m.bindPopup(`
-      <div class="popup-title">${r.type}</div>
-      <div class="popup-meta">📍 ${r.address}</div>
+      <div class="popup-title">${escHtml(r.type)}</div>
+      <div class="popup-meta">📍 ${escHtml(r.address)}</div>
       <div class="popup-meta" style="margin-top:4px;">
-        <span style="color:${color};font-weight:700;">${r.severity || "—"}</span>
+        <span style="color:${color};font-weight:700;">${escHtml(r.severity || "—")}</span>
         &nbsp;·&nbsp; ${STATUS_LABEL[r.status] || "Pendiente"}
       </div>
-      <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;line-height:1.4;">${r.desc || ""}</div>
-      <div class="popup-meta" style="margin-top:6px;">🕐 ${r.date} · 👤 ${r.reporter || "Anónimo"}</div>
+      <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;line-height:1.4;">${escHtml(r.desc || "")}</div>
+      <div class="popup-meta" style="margin-top:6px;">🕐 ${escHtml(r.date)} · 👤 ${escHtml(r.reporter || "Anónimo")}</div>
       ${photosHtml}
     `, { maxWidth: 300 });
             m.addTo(markersLayer);
@@ -781,8 +781,8 @@
     <div class="report-item ${highlightFirst && i===0 ? 'new-report' : ''}" onclick="flyTo(${r.lat},${r.lng})">
       <div class="report-dot" style="background:${SEVER_COLOR[r.severity]||'#8BA5BA'}"></div>
       <div class="report-info">
-        <strong>${r.type}</strong>
-        <span>${r.address} · ${r.date}</span>
+        <strong>${escHtml(r.type)}</strong>
+        <span>${escHtml(r.address)} · ${escHtml(r.date)}</span>
       </div>
       <span class="report-badge ${STATUS_CLASS[r.status] || 'badge-pending'}">${STATUS_LABEL[r.status] || 'Pendiente'}</span>
     </div>
@@ -920,6 +920,39 @@
     document.getElementById("address").addEventListener("input", updateSteps);
 
 
+
+    // ─── SEGURIDAD: SANITIZACIÓN XSS ─────────────────────────────────────────────
+    /** Escapa caracteres HTML para prevenir inyección de código desde Firestore */
+    function escHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // ─── SEGURIDAD: RATE LIMITING ─────────────────────────────────────────────────
+    const RATE_KEY   = 'vias_last_report';
+    const RATE_LIMIT = 5 * 60 * 1000; // 5 minutos entre reportes
+
+    function checkRateLimit() {
+        const last = parseInt(localStorage.getItem(RATE_KEY) || '0');
+        const now  = Date.now();
+        const diff = now - last;
+        if (diff < RATE_LIMIT) {
+            const resta = Math.ceil((RATE_LIMIT - diff) / 60000);
+            showToast('⏳', `Espera ${resta} min antes de enviar otro reporte`);
+            return false;
+        }
+        return true;
+    }
+
+    function markRateLimit() {
+        localStorage.setItem(RATE_KEY, Date.now().toString());
+    }
+
     // ─── VALIDACIÓN DE DUPLICADOS ────────────────────────────────────────────────
 
     /** Distancia en metros entre dos puntos GPS (fórmula Haversine) */
@@ -950,10 +983,10 @@
 
     /** Muestra el modal de duplicado con los datos del reporte existente */
     function mostrarDupModal(dup, distMetros) {
-        document.getElementById('dup-type').textContent    = dup.type    || '—';
-        document.getElementById('dup-address').textContent = dup.address || '—';
+        document.getElementById('dup-type').textContent    = escHtml(dup.type    || '—');
+        document.getElementById('dup-address').textContent = escHtml(dup.address || '—');
         document.getElementById('dup-status').textContent  = STATUS_LABEL_DUP[dup.status] || dup.status;
-        document.getElementById('dup-date').textContent    = dup.date    || 'Hace un momento';
+        document.getElementById('dup-date').textContent    = escHtml(dup.date    || 'Hace un momento');
         document.getElementById('dup-dist').textContent    = `📍 ${Math.round(distMetros)} m de distancia`;
         // Guardar lat/lng del duplicado para el botón "ver en mapa"
         document.getElementById('dup-modal').dataset.lat = dup.lat;
@@ -985,6 +1018,9 @@
     // ─── SUBMIT ──────────────────────────────────────────────────────────────────
     document.getElementById("report-form").addEventListener("submit", async function(e) {
         e.preventDefault();
+        // ── Seguridad: rate limiting ──────────────────────────────────────────
+        if (!checkRateLimit()) return;
+
         if (!document.getElementById("damage-type").value) { showToast("⚠️","Selecciona el tipo de daño"); return; }
         if (!selectedSeverity) { showToast("⚠️","Selecciona la severidad"); return; }
         if (!userLat || !userLng) { showToast("📍","Captura tu ubicación GPS primero"); return; }
@@ -1046,6 +1082,7 @@
             flyTo(newReport.lat, newReport.lng);
         }
 
+        markRateLimit(); // ← registrar timestamp para rate limiting
         document.getElementById("modal-id").textContent = `ID: ${docId}`;
         document.getElementById("modal").classList.add("show");
 
