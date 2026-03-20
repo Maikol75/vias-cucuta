@@ -149,8 +149,9 @@
             animation:fadeUp .6s .4s ease both;
         }
         .stat { text-align:center; }
-        .stat-n { font-family:var(--font-head); font-size:2.2rem; font-weight:800; }
+        .stat-n { font-family:var(--font-head); font-size:2.2rem; font-weight:800; transition:transform .3s; display:inline-block; }
         .stat-n span { color:var(--teal); }
+        .stat-n.bump { transform:scale(1.18); }
         .stat-l { font-size:.8rem; color:var(--gray); margin-top:.2rem; }
 
         /* SECTIONS */
@@ -186,8 +187,20 @@
         .badge-done     { background:rgba(39,174,96,.15);  color:var(--green); }
 
         /* LIVE PULSE for new reports */
-        .report-item.new-report { animation: highlight .8s ease; }
-        @keyframes highlight { 0%{background:rgba(14,124,134,.3)} 100%{background:transparent} }
+        .report-item.new-report { animation: highlight 1.2s ease; }
+        @keyframes highlight { 0%{background:rgba(14,124,134,.35)} 100%{background:transparent} }
+
+        /* NEW REPORT marker pulse */
+        @keyframes markerPulse {
+            0%   { box-shadow: 0 2px 8px rgba(0,0,0,.5), 0 0 0 0 rgba(14,124,134,.7); }
+            70%  { box-shadow: 0 2px 8px rgba(0,0,0,.5), 0 0 0 14px rgba(14,124,134,0); }
+            100% { box-shadow: 0 2px 8px rgba(0,0,0,.5), 0 0 0 0 rgba(14,124,134,0); }
+        }
+        .marker-new { animation: markerPulse 1.5s ease 3; }
+
+        /* LAST UPDATED tag */
+        .last-updated { font-size:.73rem; color:var(--gray); margin-top:.7rem; padding-top:.6rem; border-top:1px solid rgba(255,255,255,.06); display:flex; align-items:center; gap:.4rem; }
+        .last-updated span { color:var(--teal-light); font-weight:600; }
 
         /* FORM */
         #reporte { padding:5rem 2rem; background:var(--navy); }
@@ -254,6 +267,69 @@
         .setup-banner h4 { font-family:var(--font-head); color:var(--gold); margin-bottom:.5rem; }
         .setup-banner p  { color:var(--gray); font-size:.9rem; line-height:1.6; }
         .setup-banner code { background:rgba(255,255,255,.08); padding:.1rem .4rem; border-radius:4px; font-size:.85rem; color:var(--teal-light); }
+
+
+        /* ── MODAL DE DUPLICADO ── */
+        .dup-overlay {
+            position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:2500;
+            display:flex; align-items:center; justify-content:center;
+            opacity:0; pointer-events:none; transition:opacity .3s;
+            backdrop-filter:blur(5px);
+        }
+        .dup-overlay.show { opacity:1; pointer-events:all; }
+        .dup-modal {
+            background:var(--card); border:1px solid rgba(224,92,74,.35);
+            border-radius:20px; padding:2rem; max-width:460px; width:90%;
+            transform:translateY(20px) scale(.97); transition:transform .3s;
+            box-shadow:0 24px 64px rgba(0,0,0,.55);
+        }
+        .dup-overlay.show .dup-modal { transform:translateY(0) scale(1); }
+
+        .dup-header { display:flex; align-items:center; gap:.8rem; margin-bottom:1.2rem; }
+        .dup-icon {
+            width:44px; height:44px; border-radius:50%; flex-shrink:0;
+            background:rgba(224,92,74,.15); border:1px solid rgba(224,92,74,.35);
+            display:flex; align-items:center; justify-content:center; font-size:1.3rem;
+        }
+        .dup-title { font-family:var(--font-head); font-size:1.2rem; font-weight:800; }
+        .dup-subtitle { color:var(--gray); font-size:.82rem; margin-top:.15rem; }
+
+        .dup-card {
+            background:rgba(255,255,255,.04); border:1px solid var(--border);
+            border-radius:12px; padding:1rem 1.1rem; margin-bottom:1.2rem;
+        }
+        .dup-card-row {
+            display:flex; justify-content:space-between; align-items:flex-start;
+            gap:.5rem; padding:.35rem 0; border-bottom:1px solid rgba(255,255,255,.05);
+            font-size:.85rem;
+        }
+        .dup-card-row:last-child { border-bottom:none; padding-bottom:0; }
+        .dup-card-label { color:var(--gray); font-size:.75rem; font-weight:600;
+            text-transform:uppercase; letter-spacing:.04em; flex-shrink:0; }
+        .dup-card-val { color:#D4E4F0; text-align:right; }
+
+        .dup-dist-pill {
+            display:inline-flex; align-items:center; gap:.3rem;
+            background:rgba(224,92,74,.15); border:1px solid rgba(224,92,74,.35);
+            color:var(--coral); border-radius:99px; padding:.25rem .75rem;
+            font-size:.78rem; font-weight:700;
+        }
+
+        .dup-actions { display:flex; gap:.75rem; }
+        .dup-btn-cancel {
+            flex:1; padding:.75rem 1rem; border-radius:10px;
+            border:1px solid var(--border); background:transparent;
+            color:var(--gray); cursor:pointer; font-family:var(--font-body);
+            font-size:.9rem; font-weight:600; transition:all .2s;
+        }
+        .dup-btn-cancel:hover { border-color:var(--teal); color:var(--white); }
+        .dup-btn-map {
+            flex:1; padding:.75rem 1rem; border-radius:10px;
+            border:1px solid var(--teal); background:rgba(14,124,134,.15);
+            color:var(--teal-light); cursor:pointer; font-family:var(--font-body);
+            font-size:.9rem; font-weight:600; transition:all .2s;
+        }
+        .dup-btn-map:hover { background:rgba(14,124,134,.28); color:var(--white); }
 
         footer { background:var(--navy2); border-top:1px solid var(--border); padding:2rem; text-align:center; color:var(--gray); font-size:.85rem; }
         footer strong { color:var(--teal-light); }
@@ -367,6 +443,9 @@
 			<div class="report-list">
 				<h4>Reportes recientes</h4>
 				<div id="report-list-container"><p style="color:var(--gray);font-size:.85rem;">Cargando reportes...</p></div>
+				<div class="last-updated" id="last-updated" style="display:none;">
+					🔄 Actualizado <span id="last-updated-time">hace un momento</span>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -464,6 +543,54 @@
 	</div>
 </div>
 
+
+<!-- ══════ MODAL DUPLICADO ══════ -->
+<div class="dup-overlay" id="dup-modal">
+	<div class="dup-modal">
+		<div class="dup-header">
+			<div class="dup-icon">⚠️</div>
+			<div>
+				<div class="dup-title">Reporte ya existente</div>
+				<div class="dup-subtitle">Hay un daño activo muy cerca de tu ubicación</div>
+			</div>
+		</div>
+
+		<div class="dup-card">
+			<div class="dup-card-row">
+				<span class="dup-card-label">Tipo</span>
+				<span class="dup-card-val" id="dup-type">—</span>
+			</div>
+			<div class="dup-card-row">
+				<span class="dup-card-label">Dirección</span>
+				<span class="dup-card-val" id="dup-address">—</span>
+			</div>
+			<div class="dup-card-row">
+				<span class="dup-card-label">Estado</span>
+				<span class="dup-card-val" id="dup-status">—</span>
+			</div>
+			<div class="dup-card-row">
+				<span class="dup-card-label">Reportado</span>
+				<span class="dup-card-val" id="dup-date">—</span>
+			</div>
+			<div class="dup-card-row">
+				<span class="dup-card-label">Distancia</span>
+				<span class="dup-dist-pill" id="dup-dist">— m</span>
+			</div>
+		</div>
+
+		<p style="color:var(--gray);font-size:.86rem;line-height:1.6;margin-bottom:1.3rem;">
+			Este reporte ya está siendo gestionado por las autoridades.
+			Si tu daño es <strong style="color:var(--white);">diferente o en otra ubicación exacta</strong>,
+			puedes ajustar el GPS y volver a intentarlo.
+		</p>
+
+		<div class="dup-actions">
+			<button class="dup-btn-cancel" onclick="closeDupModal()">✕ Cancelar envío</button>
+			<button class="dup-btn-map" onclick="verDuplicadoEnMapa()">🗺️ Ver en el mapa</button>
+		</div>
+	</div>
+</div>
+
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
 	<div class="lightbox-inner">
@@ -524,17 +651,38 @@
         // Firebase is configured — switch UI
         firebaseReady = true;
         const badge = document.getElementById("db-badge");
-        badge.textContent = "Firebase conectado";
+        badge.textContent = "🟢 Firebase en vivo";
         badge.classList.remove("offline");
 
-        // Real-time listener
+        // Real-time listener con detección de nuevos reportes
+        let isFirstLoad = true;
         const q = fb.query(fb.collection(fb.db, "reportes"), fb.orderBy("timestamp", "desc"));
         fb.onSnapshot(q, snapshot => {
-            const fbReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: timeAgo(doc.data().timestamp?.toDate()) }));
-            allReports = [...fbReports]; // Only Firebase data when connected
+            const prevCount = allReports.length;
+            const fbReports = snapshot.docs.map(doc => ({
+                id: doc.id, ...doc.data(),
+                date: timeAgo(doc.data().timestamp?.toDate())
+            }));
+            allReports = [...fbReports];
+
+            // Toast cuando llega un reporte nuevo (no en la carga inicial)
+            const isNew = !isFirstLoad && allReports.length > prevCount;
+            if (isNew) {
+                showToast("🆕", `Nuevo reporte registrado — ${allReports.length} en total`);
+            }
+            isFirstLoad = false;
+
             renderMarkers();
-            renderList();
+            renderList(isNew);
             updateStats();
+
+            // Indicador "última actualización"
+            const lu = document.getElementById("last-updated");
+            const luTime = document.getElementById("last-updated-time");
+            if (lu && luTime) {
+                lu.style.display = "flex";
+                luTime.textContent = new Date().toLocaleTimeString("es-CO", { hour:"2-digit", minute:"2-digit" });
+            }
         });
     }
 
@@ -580,10 +728,11 @@
         renderMarkers();
     }
 
-    function makeIcon(color) {
+    function makeIcon(color, severity) {
+        const glow = severity === "critico" ? `, 0 0 0 4px ${color}33` : "";
         return L.divIcon({
             className:"",
-            html:`<div style="width:18px;height:18px;background:${color};border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5);"></div>`,
+            html:`<div style="width:18px;height:18px;background:${color};border-radius:50%;border:3px solid rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(0,0,0,.5)${glow};"></div>`,
             iconSize:[18,18], iconAnchor:[9,9]
         });
     }
@@ -594,7 +743,7 @@
         allReports.forEach(r => {
             if (!r.lat || !r.lng) return;
             const color = SEVER_COLOR[r.severity] || "#8BA5BA";
-            const m = L.marker([r.lat, r.lng], { icon: makeIcon(color) });
+            const m = L.marker([r.lat, r.lng], { icon: makeIcon(color, r.severity) });
 
             // Build photo strip HTML
             let photosHtml = "";
@@ -611,9 +760,12 @@
             m.bindPopup(`
       <div class="popup-title">${r.type}</div>
       <div class="popup-meta">📍 ${r.address}</div>
-      <div class="popup-meta" style="margin-top:4px;">⚠️ ${r.severity} · ${STATUS_LABEL[r.status] || "Pendiente"}</div>
-      <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;">${r.desc || ""}</div>
-      <div class="popup-meta" style="margin-top:4px;">🕐 ${r.date}</div>
+      <div class="popup-meta" style="margin-top:4px;">
+        <span style="color:${color};font-weight:700;">${r.severity || "—"}</span>
+        &nbsp;·&nbsp; ${STATUS_LABEL[r.status] || "Pendiente"}
+      </div>
+      <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;line-height:1.4;">${r.desc || ""}</div>
+      <div class="popup-meta" style="margin-top:6px;">🕐 ${r.date} · 👤 ${r.reporter || "Anónimo"}</div>
       ${photosHtml}
     `, { maxWidth: 300 });
             m.addTo(markersLayer);
@@ -687,9 +839,20 @@
 
     // ─── STATS ───────────────────────────────────────────────────────────────────
     function updateStats() {
-        document.getElementById("stat-total").textContent   = allReports.length;
-        document.getElementById("stat-pending").textContent = allReports.filter(r => r.status === "pending").length;
-        document.getElementById("stat-done").textContent    = allReports.filter(r => r.status === "done").length;
+        setStatNum("stat-total",   allReports.length);
+        setStatNum("stat-pending", allReports.filter(r => r.status === "pending").length);
+        setStatNum("stat-done",    allReports.filter(r => r.status === "done").length);
+    }
+
+    function setStatNum(id, val) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const prev = parseInt(el.textContent) || 0;
+        el.textContent = val;
+        if (prev !== val) {
+            el.classList.add("bump");
+            setTimeout(() => el.classList.remove("bump"), 350);
+        }
     }
 
     // ─── FORM HELPERS ────────────────────────────────────────────────────────────
@@ -756,12 +919,85 @@
     document.getElementById("damage-type").addEventListener("change", updateSteps);
     document.getElementById("address").addEventListener("input", updateSteps);
 
+
+    // ─── VALIDACIÓN DE DUPLICADOS ────────────────────────────────────────────────
+
+    /** Distancia en metros entre dos puntos GPS (fórmula Haversine) */
+    function haversineMetros(lat1, lng1, lat2, lng2) {
+        const R = 6371000;
+        const toRad = x => x * Math.PI / 180;
+        const dLat  = toRad(lat2 - lat1);
+        const dLng  = toRad(lng2 - lng1);
+        const a = Math.sin(dLat/2)**2
+            + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+            * Math.sin(dLng/2)**2;
+        return R * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    /**
+     * Busca un reporte activo (pending | progress) dentro de `radioMetros`.
+     * Retorna el objeto reporte si lo encuentra, o null.
+     */
+    function buscarDuplicado(lat, lng, radioMetros = 50) {
+        return allReports.find(r => {
+            if (!r.lat || !r.lng)                        return false; // sin coordenadas
+            if (r.status !== 'pending' && r.status !== 'progress') return false; // solo activos
+            return haversineMetros(lat, lng, r.lat, r.lng) <= radioMetros;
+        }) || null;
+    }
+
+    const STATUS_LABEL_DUP = { pending:'⏳ Pendiente', progress:'🔧 En proceso' };
+
+    /** Muestra el modal de duplicado con los datos del reporte existente */
+    function mostrarDupModal(dup, distMetros) {
+        document.getElementById('dup-type').textContent    = dup.type    || '—';
+        document.getElementById('dup-address').textContent = dup.address || '—';
+        document.getElementById('dup-status').textContent  = STATUS_LABEL_DUP[dup.status] || dup.status;
+        document.getElementById('dup-date').textContent    = dup.date    || 'Hace un momento';
+        document.getElementById('dup-dist').textContent    = `📍 ${Math.round(distMetros)} m de distancia`;
+        // Guardar lat/lng del duplicado para el botón "ver en mapa"
+        document.getElementById('dup-modal').dataset.lat = dup.lat;
+        document.getElementById('dup-modal').dataset.lng = dup.lng;
+        document.getElementById('dup-modal').classList.add('show');
+    }
+
+    function closeDupModal() {
+        document.getElementById('dup-modal').classList.remove('show');
+        // Rehabilitar el botón de envío por si quedó desactivado
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = false;
+        btn.innerHTML = '📤 Enviar reporte';
+    }
+
+    function verDuplicadoEnMapa() {
+        const el  = document.getElementById('dup-modal');
+        const lat = parseFloat(el.dataset.lat);
+        const lng = parseFloat(el.dataset.lng);
+        closeDupModal();
+        if (lat && lng) flyTo(lat, lng);
+    }
+
+    // Cerrar al clic en el fondo
+    document.getElementById('dup-modal').addEventListener('click', e => {
+        if (e.target === document.getElementById('dup-modal')) closeDupModal();
+    });
+
     // ─── SUBMIT ──────────────────────────────────────────────────────────────────
     document.getElementById("report-form").addEventListener("submit", async function(e) {
         e.preventDefault();
         if (!document.getElementById("damage-type").value) { showToast("⚠️","Selecciona el tipo de daño"); return; }
         if (!selectedSeverity) { showToast("⚠️","Selecciona la severidad"); return; }
         if (!userLat || !userLng) { showToast("📍","Captura tu ubicación GPS primero"); return; }
+
+        // ── Validación de duplicados ───────────────────────────────────────────
+        const latNum = parseFloat(userLat);
+        const lngNum = parseFloat(userLng);
+        const dup = buscarDuplicado(latNum, lngNum, 50);
+        if (dup) {
+            const dist = haversineMetros(latNum, lngNum, dup.lat, dup.lng);
+            mostrarDupModal(dup, dist);
+            return; // ← bloquear envío
+        }
 
         const btn = document.getElementById("submit-btn");
         btn.disabled = true; btn.innerHTML = "⏳ Guardando en base de datos...";
