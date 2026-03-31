@@ -11,7 +11,7 @@
 
 	<script type="module">
         import { initializeApp }     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc }
+        import { getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc }
             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -31,7 +31,7 @@
 
         window._db      = db;
         window._auth    = auth;
-        window._fns     = { collection, onSnapshot, query, orderBy, doc, updateDoc };
+        window._fns     = { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc };
         window._authFns = { signInWithEmailAndPassword, signOut, onAuthStateChanged };
 	</script>
 
@@ -249,6 +249,45 @@
         .status-btn.done     { border-color:rgba(39,174,96,.5);  color:var(--green);      }
         .status-btn:hover    { opacity:.8; transform:translateY(-1px); }
         .status-btn.current  { opacity:.35; cursor:default; transform:none; }
+
+        /* ── Botón eliminar ── */
+        .delete-zone { margin-top:1.2rem; padding-top:1.2rem; border-top:1px solid rgba(224,92,74,.2); display:none; }
+        .delete-zone.show { display:block; }
+        .delete-hint { font-size:.8rem; color:var(--gray); margin-bottom:.75rem; }
+        .delete-hint strong { color:var(--coral); }
+        .btn-delete {
+            width:100%; padding:.75rem 1rem; border-radius:10px;
+            border:2px solid rgba(224,92,74,.5); background:transparent;
+            color:var(--coral); cursor:pointer; font-family:var(--font-body);
+            font-size:.9rem; font-weight:700; transition:all .2s;
+            display:flex; align-items:center; justify-content:center; gap:.5rem;
+        }
+        .btn-delete:hover { background:rgba(224,92,74,.12); border-color:var(--coral); }
+
+        /* ── Confirmación de eliminación ── */
+        .confirm-zone {
+            margin-top:.75rem; background:rgba(224,92,74,.08);
+            border:1px solid rgba(224,92,74,.3); border-radius:12px;
+            padding:1rem 1.1rem; display:none;
+        }
+        .confirm-zone.show { display:block; }
+        .confirm-msg { font-size:.875rem; color:#D4E4F0; margin-bottom:.85rem; line-height:1.5; }
+        .confirm-msg strong { color:var(--coral); }
+        .confirm-btns { display:flex; gap:.6rem; }
+        .confirm-yes {
+            flex:1; padding:.65rem; border-radius:9px; cursor:pointer;
+            background:var(--coral); border:none; color:#fff;
+            font-family:var(--font-body); font-size:.875rem; font-weight:700;
+            transition:all .2s;
+        }
+        .confirm-yes:hover { opacity:.85; transform:translateY(-1px); }
+        .confirm-no {
+            flex:1; padding:.65rem; border-radius:9px; cursor:pointer;
+            background:transparent; border:1px solid var(--border); color:var(--gray);
+            font-family:var(--font-body); font-size:.875rem; font-weight:600;
+            transition:all .2s;
+        }
+        .confirm-no:hover { border-color:var(--teal); color:var(--white); }
 
         /* ── LIGHTBOX ── */
         .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:2000; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
@@ -474,6 +513,19 @@
 				<button class="status-btn pending"  id="btn-pending"  onclick="setStatus('pending')">⏳ Pendiente</button>
 				<button class="status-btn progress" id="btn-progress" onclick="setStatus('progress')">🔧 En proceso</button>
 				<button class="status-btn done"     id="btn-done"     onclick="setStatus('done')">✅ Resuelto</button>
+			</div>
+
+			<!-- Zona de eliminación — solo visible cuando status = done -->
+			<div class="delete-zone" id="delete-zone">
+				<p class="delete-hint">Este reporte está marcado como <strong>Resuelto</strong>. Puedes eliminarlo permanentemente de la base de datos.</p>
+				<button class="btn-delete" onclick="promptDelete()">🗑️ Eliminar reporte</button>
+				<div class="confirm-zone" id="confirm-zone">
+					<p class="confirm-msg">¿Confirmar eliminación? Esta acción <strong>no se puede deshacer</strong> y borrará el reporte y sus datos de Firestore.</p>
+					<div class="confirm-btns">
+						<button class="confirm-no"  onclick="cancelDelete()">Cancelar</button>
+						<button class="confirm-yes" onclick="confirmDelete()">Sí, eliminar</button>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -823,6 +875,11 @@
             document.getElementById('btn-' + s).classList.toggle('current', r.status === s);
         });
 
+        // Mostrar zona de eliminar solo si el reporte está resuelto
+        const dz = document.getElementById('delete-zone');
+        dz.classList.toggle('show', r.status === 'done');
+        cancelDelete(); // resetear confirmación al abrir
+
         // Volar el mapa a esta ubicación
         if (r.lat && r.lng) flyToReport(r.lat, r.lng);
 
@@ -836,6 +893,33 @@
     document.getElementById('modal').addEventListener('click', e => {
         if (e.target === document.getElementById('modal')) closeModal();
     });
+
+
+    /* ══════════════════════════════════════════════════════════════
+       ELIMINACIÓN DE REPORTES
+    ══════════════════════════════════════════════════════════════ */
+    function promptDelete() {
+        document.getElementById('confirm-zone').classList.add('show');
+    }
+
+    function cancelDelete() {
+        document.getElementById('confirm-zone').classList.remove('show');
+    }
+
+    async function confirmDelete() {
+        if (!currentId) return;
+        const db  = window._db;
+        const fns = window._fns;
+        try {
+            await fns.deleteDoc(fns.doc(db, 'reportes', currentId));
+            showToast('🗑️', 'Reporte eliminado correctamente');
+            closeModal();
+        } catch(e) {
+            console.error(e);
+            showToast('❌', 'Error al eliminar. Revisa las reglas de Firestore.');
+            cancelDelete();
+        }
+    }
 
     /* ══════════════════════════════════════════════════════════════
        CAMBIO DE ESTADO

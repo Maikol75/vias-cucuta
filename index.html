@@ -227,10 +227,21 @@
         .photo-upload strong { color:var(--teal-light); }
         .photo-preview { display:flex; gap:.75rem; flex-wrap:wrap; margin-top:1rem; }
         .photo-thumb { width:80px; height:80px; border-radius:8px; object-fit:cover; border:2px solid var(--teal); }
-        .gps-btn { width:100%; background:rgba(14,124,134,.12); border:1px solid var(--teal); color:var(--teal-light); padding:.75rem 1rem; border-radius:10px; font-family:var(--font-body); font-size:.9rem; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:.5rem; }
+        .gps-row { display:flex; gap:.6rem; }
+        .gps-btn { flex:1; background:rgba(14,124,134,.12); border:1px solid var(--teal); color:var(--teal-light); padding:.75rem 1rem; border-radius:10px; font-family:var(--font-body); font-size:.9rem; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:.5rem; }
         .gps-btn:hover { background:rgba(14,124,134,.25); }
+        .pin-btn { flex:1; background:rgba(240,165,0,.10); border:1px solid rgba(240,165,0,.45); color:var(--gold); padding:.75rem 1rem; border-radius:10px; font-family:var(--font-body); font-size:.9rem; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:.5rem; }
+        .pin-btn:hover { background:rgba(240,165,0,.2); }
+        .pin-btn.active { background:rgba(240,165,0,.22); border-color:var(--gold); animation:pinPulse 1.5s ease infinite; }
+        @keyframes pinPulse { 0%,100%{box-shadow:0 0 0 0 rgba(240,165,0,.4)} 50%{box-shadow:0 0 0 6px rgba(240,165,0,0)} }
+        .pin-hint { margin-top:.5rem; font-size:.78rem; color:var(--gold); display:none; align-items:center; gap:.4rem; }
+        .pin-hint.show { display:flex; }
         .gps-result { margin-top:.6rem; font-size:.82rem; color:var(--green); display:none; align-items:center; gap:.4rem; }
         .gps-result.show { display:flex; }
+        /* Marcador arrastrable del usuario */
+        .user-pin-icon { width:28px; height:36px; display:flex; flex-direction:column; align-items:center; filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+        .user-pin-head { width:24px; height:24px; background:var(--gold); border-radius:50%; border:3px solid white; }
+        .user-pin-tail { width:3px; height:12px; background:var(--gold); border-radius:0 0 3px 3px; }
         .severity-group { display:flex; gap:.6rem; }
         .severity-btn { flex:1; padding:.6rem; border-radius:8px; border:2px solid var(--border); background:transparent; color:var(--gray); cursor:pointer; font-family:var(--font-body); font-size:.82rem; font-weight:600; transition:all .2s; text-align:center; }
         .severity-btn:hover { border-color:var(--teal); color:var(--white); }
@@ -502,7 +513,11 @@
 			</div>
 			<div class="form-group">
 				<label>Geolocalización GPS</label>
-				<button type="button" class="gps-btn" id="gps-btn" onclick="getGPS()">📍 Obtener mi ubicación actual</button>
+				<div class="gps-row">
+					<button type="button" class="gps-btn" id="gps-btn" onclick="getGPS()">📍 Mi ubicación</button>
+					<button type="button" class="pin-btn" id="pin-btn" onclick="togglePinMode()">📌 Marcar en el mapa</button>
+				</div>
+				<div class="pin-hint" id="pin-hint">🖱️ Haz clic en el mapa para colocar el marcador — puedes arrastrarlo para ajustar</div>
 				<div class="gps-result" id="gps-result">✅ Ubicación capturada: <span id="gps-coords"></span></div>
 			</div>
 			<div class="form-group">
@@ -632,6 +647,88 @@
     let userLat = null, userLng = null;
     let map, markersLayer;
     let firebaseReady = false;
+
+    // ── Pin manual en el mapa ──────────────────────────────────────────────
+    let pinMode    = false;   // ¿el modo pin está activo?
+    let userPin    = null;    // marcador arrastrable del usuario
+    let mapClickFn = null;    // referencia al listener para poder removerlo
+
+    /** Icono dorado para el marcador del usuario */
+    function makeUserPinIcon() {
+        return L.divIcon({
+            className: "",
+            html: `<div class="user-pin-icon">
+                     <div class="user-pin-head"></div>
+                     <div class="user-pin-tail"></div>
+                   </div>`,
+            iconSize:   [28, 36],
+            iconAnchor: [14, 36],   // punta del pin en la coordenada exacta
+            popupAnchor:[0, -36]
+        });
+    }
+
+    /** Coloca o mueve el marcador del usuario y actualiza las coords */
+    function setUserPin(lat, lng) {
+        const latlng = [lat, lng];
+        if (userPin) {
+            userPin.setLatLng(latlng);
+        } else {
+            userPin = L.marker(latlng, {
+                icon:      makeUserPinIcon(),
+                draggable: true,
+                zIndexOffset: 1000
+            }).addTo(map);
+
+            // Actualizar coordenadas al arrastrar
+            userPin.on("dragend", e => {
+                const pos = e.target.getLatLng();
+                userLat = pos.lat.toFixed(5);
+                userLng = pos.lng.toFixed(5);
+                document.getElementById("gps-coords").textContent = `${userLat}, ${userLng}`;
+                updateSteps();
+            });
+        }
+        userLat = lat.toFixed(5);
+        userLng = lng.toFixed(5);
+        showGPSResult("📌");
+        disablePinMode();           // desactivar modo pin después de colocar
+    }
+
+    /** Activa / desactiva el modo de marcar en el mapa */
+    function togglePinMode() {
+        if (pinMode) { disablePinMode(); return; }
+        enablePinMode();
+    }
+
+    function enablePinMode() {
+        pinMode = true;
+        document.getElementById("pin-btn").classList.add("active");
+        document.getElementById("pin-btn").textContent = "✕ Cancelar marcado";
+        document.getElementById("pin-hint").classList.add("show");
+        // Cambiar cursor del mapa
+        map.getContainer().style.cursor = "crosshair";
+        // Scroll al mapa
+        document.getElementById("mapa").scrollIntoView({ behavior: "smooth" });
+        // Listener de clic en el mapa
+        mapClickFn = e => setUserPin(e.latlng.lat, e.latlng.lng);
+        map.on("click", mapClickFn);
+    }
+
+    function disablePinMode() {
+        pinMode = false;
+        const btn = document.getElementById("pin-btn");
+        btn.classList.remove("active");
+        btn.textContent = "📌 Marcar en el mapa";
+        document.getElementById("pin-hint").classList.remove("show");
+        map.getContainer().style.cursor = "";
+        if (mapClickFn) { map.off("click", mapClickFn); mapClickFn = null; }
+    }
+
+    /** Limpiar el pin del usuario al resetear el formulario */
+    function clearUserPin() {
+        if (userPin) { map.removeLayer(userPin); userPin = null; }
+        disablePinMode();
+    }
 
     // ─── FIREBASE INTEGRATION ────────────────────────────────────────────────────
     function setupFirebase() {
@@ -831,10 +928,14 @@
 
     document.addEventListener("keydown", e => {
         const lb = document.getElementById("lightbox");
+        if (e.key === "Escape") {
+            if (lb.classList.contains("show")) lb.classList.remove("show");
+            if (pinMode) disablePinMode();
+            return;
+        }
         if (!lb.classList.contains("show")) return;
         if (e.key === "ArrowRight") lbNav(1);
         if (e.key === "ArrowLeft")  lbNav(-1);
-        if (e.key === "Escape")     lb.classList.remove("show");
     });
 
     // ─── STATS ───────────────────────────────────────────────────────────────────
@@ -883,9 +984,9 @@
         else onError();
     }
 
-    function showGPSResult() {
+    function showGPSResult(icon = "✅") {
         const btn = document.getElementById("gps-btn");
-        btn.textContent = "✅ Ubicación capturada";
+        btn.textContent = `${icon} Ubicación capturada`;
         btn.style.borderColor = "var(--green)"; btn.style.color = "var(--green)";
         btn.disabled = false;
         document.getElementById("gps-coords").textContent = `${userLat}, ${userLng}`;
@@ -1094,6 +1195,7 @@
         document.getElementById("gps-btn").style.cssText = "";
         document.getElementById("photo-preview").innerHTML = "";
         selectedSeverity = ""; userLat = null; userLng = null;
+        clearUserPin();
         updateSteps();
     });
 
