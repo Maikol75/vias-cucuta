@@ -7,7 +7,7 @@ export const firebaseConfig = {
     apiKey:            "AIzaSyAW15yvAjBHQR068JguNhaL_Tmtzoovmio",
     authDomain:        "vias-cucuta.firebaseapp.com",
     projectId:         "vias-cucuta",
-    storageBucket:     "vias-cucuta.appspot.app",
+    storageBucket:     "vias-cucuta.firebasestorage.app",
     messagingSenderId: "1002872048654",
     appId:             "1:1002872048654:web:e673afed3fc382ef80c05f",
     measurementId:     "G-9JWZMMBF2T"
