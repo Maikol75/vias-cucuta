@@ -17,7 +17,10 @@ import {
 const CUCUTA       = [7.8939, -72.5078];
 const SEV_LABEL    = { critico:'🔴 Crítico', moderado:'🟠 Moderado', leve:'🟡 Leve' };
 const STATUS_LABEL = { pending:'Pendiente', progress:'En proceso', done:'Resuelto' };
-const SEVER_COLOR  = { critico:'#E05C4A', moderado:'#F0A500', leve:'#27AE60' };
+// Colores de severidad — deben coincidir con las variables --coral/--gold/--green de admin.css
+const SEVER_COLOR  = { critico:'#F0384F', moderado:'#FFA726', leve:'#2FD480' };
+// Peso de cada severidad para la intensidad del mapa de calor
+const SEV_WEIGHT   = { critico:1.0, moderado:0.6, leve:0.3 };
 
 /* ──────────── ESTADO ──────────── */
 let allReports     = [];
@@ -29,19 +32,58 @@ const PAGE_SIZE    = 10;
 let currentId      = null;
 let firestoreUnsub = null;
 let adminMap, adminMarkersLayer;
+let heatLayer      = null;
+let heatmapMode    = false;
 
 /* ──────────── HELPERS ──────────── */
+function toJsDate(ts) {
+    if (!ts) return null;
+    if (typeof ts.toDate === "function") return ts.toDate();
+    if (ts.seconds) return new Date(ts.seconds * 1000);
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? null : d;
+}
+
 function timeAgo(ts) {
-    if (!ts) return '—';
-    const date = ts.toDate
-        ? ts.toDate()
-        : (ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts));
-    if (isNaN(date.getTime())) return '—';
+    const date = toJsDate(ts);
+    if (!date) return '—';
     const s = Math.floor((Date.now() - date.getTime()) / 1000);
     if (s < 60)    return 'Hace un momento';
     if (s < 3600)  return `Hace ${Math.floor(s / 60)} min`;
     if (s < 86400) return `Hace ${Math.floor(s / 3600)} h`;
     return `Hace ${Math.floor(s / 86400)} días`;
+}
+
+/** Formatea una fecha completa (para exportaciones) en formato es-CO */
+function formatFechaCompleta(ts) {
+    const date = toJsDate(ts);
+    if (!date) return '';
+    return date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
+ * Horas transcurridas entre la creación de un reporte (timestamp) y el
+ * momento en que se marcó como resuelto (resolvedAt). Devuelve null si
+ * falta alguno de los dos datos (p. ej. reportes resueltos antes de que
+ * existiera este campo) — nunca inventa un número.
+ */
+function resolutionHours(r) {
+    const start = toJsDate(r.timestamp);
+    const end   = toJsDate(r.resolvedAt);
+    if (!start || !end) return null;
+    const ms = end.getTime() - start.getTime();
+    return ms > 0 ? ms / 3600000 : null;
+}
+
+/**
+ * Promedio de resolutionHours() sobre toda la lista de reportes.
+ * Es la misma cuenta que usa el hero público (index.html) para el stat
+ * "Resolución promedio" — aquí se muestra también al operador.
+ */
+function computeAvgResolutionHours(reports) {
+    const horas = reports.map(resolutionHours).filter(h => h != null);
+    if (!horas.length) return null;
+    return horas.reduce((sum, h) => sum + h, 0) / horas.length;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -103,6 +145,7 @@ function startFirestore() {
         updateStats();
         renderTable();
         renderAdminMarkers();
+        renderHeatPoints();
     }, () => {
         showToast('❌', 'Error al leer Firestore. Revisa reglas de seguridad.');
     });
@@ -118,7 +161,39 @@ function initAdminMap() {
         maxZoom: 19
     }).addTo(adminMap);
     adminMarkersLayer = L.layerGroup().addTo(adminMap);
+
+    // Capa de mapa de calor (se activa/desactiva con toggleHeatmap, no se añade al mapa aún)
+    // Progresión "seguro → peligro": verde (leve) → ámbar (moderado) → coral (marca) → carmesí (crítico) → rojo intenso (máxima densidad)
+    heatLayer = L.heatLayer([], {
+        radius: 26,
+        blur: 22,
+        maxZoom: 17,
+        gradient: { 0.2: '#2FD480', 0.4: '#FFA726', 0.6: '#FF6B4A', 0.8: '#F0384F', 1.0: '#ff2b2b' }
+    });
 }
+
+/* ── Pantalla completa del mapa ── */
+let mapIsFullscreen = false;
+function toggleMapFullscreen() {
+    const section = document.getElementById('map-section');
+    const btn     = document.getElementById('fullscreen-btn');
+    mapIsFullscreen = !mapIsFullscreen;
+    if (mapIsFullscreen) {
+        section.classList.add('map-fullscreen');
+        btn.textContent = '✕ Salir de pantalla completa';
+        document.body.style.overflow = 'hidden';
+    } else {
+        section.classList.remove('map-fullscreen');
+        btn.textContent = '⛶ Pantalla completa';
+        document.body.style.overflow = '';
+    }
+    setTimeout(() => adminMap && adminMap.invalidateSize(), 310);
+}
+/* Tecla Escape también sale del fullscreen */
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && mapIsFullscreen) toggleMapFullscreen();
+});
+
 
 function makeAdminIcon(color) {
     return L.divIcon({
@@ -139,7 +214,7 @@ function renderAdminMarkers() {
     allReports.forEach(r => {
         if (!r.lat || !r.lng) return;
         count++;
-        const color = SEVER_COLOR[r.severity] || '#8BA5BA';
+        const color = SEVER_COLOR[r.severity] || '#9C94A8';
         const m = L.marker([r.lat, r.lng], { icon: makeAdminIcon(color) });
         m.bindPopup(`
             <div class="popup-name">${r.type || '—'}</div>
@@ -152,6 +227,36 @@ function renderAdminMarkers() {
     });
     document.getElementById('map-count-tag').textContent =
         count ? `${count} marcador${count !== 1 ? 'es' : ''} activo${count !== 1 ? 's' : ''}` : 'Sin coordenadas';
+}
+
+/**
+ * Recalcula los puntos del mapa de calor a partir de allReports.
+ * La intensidad de cada punto depende de la severidad del daño.
+ */
+function renderHeatPoints() {
+    if (!heatLayer) return;
+    const points = allReports
+        .filter(r => r.lat && r.lng)
+        .map(r => [r.lat, r.lng, SEV_WEIGHT[r.severity] || 0.5]);
+    heatLayer.setLatLngs(points);
+}
+
+/** Alterna entre la vista de marcadores individuales y el mapa de calor */
+function toggleHeatmap() {
+    if (!adminMap || !heatLayer) return;
+    heatmapMode = !heatmapMode;
+    const btn = document.getElementById('heatmap-btn');
+    if (heatmapMode) {
+        adminMap.removeLayer(adminMarkersLayer);
+        heatLayer.addTo(adminMap);
+        btn.classList.add('active');
+        btn.textContent = '📍 Ver marcadores';
+    } else {
+        adminMap.removeLayer(heatLayer);
+        adminMarkersLayer.addTo(adminMap);
+        btn.classList.remove('active');
+        btn.textContent = '🔥 Mapa de calor';
+    }
 }
 
 function flyToReport(lat, lng) {
@@ -168,6 +273,7 @@ function updateStats() {
     animateNumber('s-pending',  allReports.filter(r => r.status === 'pending').length);
     animateNumber('s-progress', allReports.filter(r => r.status === 'progress').length);
     animateNumber('s-done',     allReports.filter(r => r.status === 'done').length);
+    updateAvgResolutionStat();
 }
 
 function animateNumber(id, target) {
@@ -177,6 +283,18 @@ function animateNumber(id, target) {
     el.textContent = target;
     el.style.transform = 'scale(1.15)';
     setTimeout(() => { el.style.transform = ''; el.style.transition = 'transform .3s'; }, 200);
+}
+
+/** Actualiza la tarjeta "Resolución promedio" con un valor calculado de verdad. */
+function updateAvgResolutionStat() {
+    const el = document.getElementById('s-avg-time');
+    if (!el) return;
+    const avgHours = computeAvgResolutionHours(allReports);
+    el.textContent = avgHours == null
+        ? '—'
+        : avgHours < 48
+            ? `${Math.round(avgHours)}h`
+            : `${Math.round(avgHours / 24)}d`;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -247,6 +365,77 @@ function renderTable() {
     document.getElementById('page-current').textContent = `${currentPage} / ${maxPage}`;
     document.getElementById('btn-prev').disabled = currentPage <= 1;
     document.getElementById('btn-next').disabled = currentPage >= maxPage;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXPORTACIÓN A CSV
+══════════════════════════════════════════════════════════════ */
+
+/** Envuelve un valor en comillas dobles y escapa comillas internas (RFC 4180) */
+function csvField(val) {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+}
+
+/**
+ * Exporta a un archivo .csv los reportes que cumplen los filtros
+ * y la búsqueda activos en ese momento (mismo criterio que la tabla).
+ * Incluye fecha de resolución y horas de resolución cuando el reporte
+ * las tiene (ver resolutionHours) — útil para armar reportes de gestión.
+ * Usa ";" como delimitador para abrir bien en Excel con configuración regional es-CO,
+ * y añade BOM UTF-8 para que las tildes y "ñ" se vean correctamente.
+ */
+function exportCSV() {
+    const filtered = getFiltered();
+    if (!filtered.length) {
+        showToast('⚠️', 'No hay reportes para exportar con estos filtros');
+        return;
+    }
+
+    const headers = [
+        'ID', 'Tipo de daño', 'Dirección', 'Severidad', 'Estado',
+        'Descripción', 'Reportado por', 'Latitud', 'Longitud',
+        'Fecha del reporte', 'Fecha de resolución', 'Tiempo de resolución (h)',
+        'Cantidad de fotos', 'URLs de fotos'
+    ];
+
+    const rows = filtered.map(r => {
+        const horas = resolutionHours(r);
+        return [
+            r.id || '',
+            r.type || '',
+            r.address || '',
+            SEV_LABEL[r.severity] || r.severity || '',
+            STATUS_LABEL[r.status] || r.status || '',
+            r.desc || '',
+            r.reporter || 'Ciudadano anónimo',
+            r.lat != null ? Number(r.lat).toFixed(5) : '',
+            r.lng != null ? Number(r.lng).toFixed(5) : '',
+            formatFechaCompleta(r.timestamp),
+            r.resolvedAt ? formatFechaCompleta(r.resolvedAt) : '',
+            horas != null ? horas.toFixed(1) : '',
+            r.photos ? r.photos.length : 0,
+            r.photos ? r.photos.join(' | ') : ''
+        ];
+    });
+
+    const DELIM = ';';
+    const csvLines  = [headers, ...rows].map(row => row.map(csvField).join(DELIM));
+    const csvContent = '﻿' + csvLines.join('\r\n'); // BOM para acentos correctos en Excel
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const fecha = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `vias-cucuta-reportes-${fecha}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast('⬇️', `${filtered.length} reporte(s) exportado(s) a CSV`);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -383,6 +572,9 @@ window.openLightbox   = openLightbox;
 window.closeLightbox  = closeLightbox;
 window.changePage     = changePage;
 window.onSearch       = onSearch;
+window.toggleMapFullscreen = toggleMapFullscreen;
+window.toggleHeatmap  = toggleHeatmap;
+window.exportCSV      = exportCSV;
 
 /* ══════════════════════════════════════════════════════════════════
    INICIALIZACIÓN

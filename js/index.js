@@ -14,18 +14,34 @@ import { geocodeAddress } from "../backend/geocoding-service.js";
 
 /* ──────────── CONSTANTES ──────────── */
 const CUCUTA = [7.8939, -72.5078];
-const SEVER_COLOR  = { critico:"#E05C4A", moderado:"#F0A500", leve:"#27AE60" };
+// Colores de severidad — deben coincidir con las variables --coral/--gold/--green de index.css
+const SEVER_COLOR  = { critico:"#F0384F", moderado:"#FFA726", leve:"#2FD480" };
 const STATUS_LABEL = { pending:"Pendiente", progress:"En proceso", done:"Resuelto" };
 const STATUS_CLASS = { pending:"badge-pending", progress:"badge-progress", done:"badge-done" };
 const STATUS_LABEL_DUP = { pending:'⏳ Pendiente', progress:'🔧 En proceso' };
 
+// Validación de fotos — debe coincidir con lo configurado en el preset de Cloudinary
+// (Allowed formats: jpg,png,webp). El límite de tamaño es un respaldo del lado
+// del cliente para dar feedback inmediato, ya que la consola de Cloudinary no
+// siempre expone un campo de "Max file size" fácil de ubicar según la versión.
+const MAX_PHOTO_MB        = 5;
+const MAX_PHOTO_BYTES     = MAX_PHOTO_MB * 1024 * 1024;
+const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// Reportes de ejemplo para el modo demo (sin Firebase configurado).
+// RPT-004 y RPT-006 incluyen timestamp/resolvedAt para que el stat de
+// "Resolución promedio" también funcione con datos reales en demo.
 const SAMPLE = [
     { id:"RPT-001", type:"Hueco / Bache",       address:"Av. 5 con Calle 10, Caobos",         severity:"critico",  status:"pending",  lat:7.8990,  lng:-72.5050, desc:"Hueco de ~50 cm. Riesgo para motos.",              date:"Hace 2 días" },
     { id:"RPT-002", type:"Grieta en pavimento", address:"Calle 13 #8-40, La Playa",            severity:"moderado", status:"progress", lat:7.8920,  lng:-72.5120, desc:"Grieta longitudinal de 3 m en carril derecho.",    date:"Hace 3 días" },
     { id:"RPT-003", type:"Hundimiento",         address:"Av. Libertadores Km 2",               severity:"critico",  status:"pending",  lat:7.8870,  lng:-72.4990, desc:"Hundimiento severo con acumulación de agua.",     date:"Hace 1 día"  },
-    { id:"RPT-004", type:"Bordillo deteriorado",address:"Calle 7 con Av. 4, Centro",           severity:"leve",     status:"done",     lat:7.9010,  lng:-72.5080, desc:"Bordillo roto afecta andén peatonal.",            date:"Hace 1 semana"},
+    { id:"RPT-004", type:"Bordillo deteriorado",address:"Calle 7 con Av. 4, Centro",           severity:"leve",     status:"done",     lat:7.9010,  lng:-72.5080, desc:"Bordillo roto afecta andén peatonal.",            date:"Hace 1 semana",
+        timestamp:  new Date(Date.now() - 9 * 24 * 3600 * 1000),
+        resolvedAt: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
     { id:"RPT-005", type:"Hueco / Bache",       address:"Barrio Atalaya, Cra 12",              severity:"moderado", status:"progress", lat:7.8960,  lng:-72.5200, desc:"Múltiples huecos en 30 m de vía.",                date:"Hace 4 días" },
-    { id:"RPT-006", type:"Falta señalización",  address:"Intersección Av. 0 con Calle 9",     severity:"leve",     status:"done",     lat:7.9040,  lng:-72.5010, desc:"Señal de 'Ceda el paso' desaparecida.",           date:"Hace 2 semanas"},
+    { id:"RPT-006", type:"Falta señalización",  address:"Intersección Av. 0 con Calle 9",     severity:"leve",     status:"done",     lat:7.9040,  lng:-72.5010, desc:"Señal de 'Ceda el paso' desaparecida.",           date:"Hace 2 semanas",
+        timestamp:  new Date(Date.now() - 20 * 24 * 3600 * 1000),
+        resolvedAt: new Date(Date.now() - 14 * 24 * 3600 * 1000) },
     { id:"RPT-007", type:"Grieta en pavimento", address:"Diagonal Santander, Sector Norte",   severity:"moderado", status:"pending",  lat:7.9070,  lng:-72.5160, desc:"Grieta transversal de 2 m, riesgo vehicular.",    date:"Hace 5 horas"},
 ];
 
@@ -36,6 +52,9 @@ let userLat           = null;
 let userLng           = null;
 let map, markersLayer;
 let firebaseReady     = false;
+
+// Fotos válidas seleccionadas por el usuario (tras pasar la validación de handlePhotos)
+let selectedPhotoFiles = [];
 
 // Pin manual en el mapa
 let pinMode    = false;
@@ -190,7 +209,7 @@ function renderMarkers() {
     markersLayer.clearLayers();
     allReports.forEach(r => {
         if (!r.lat || !r.lng) return;
-        const color = SEVER_COLOR[r.severity] || "#8BA5BA";
+        const color = SEVER_COLOR[r.severity] || "#9C94A8";
         const m = L.marker([r.lat, r.lng], { icon: makeIcon(color, r.severity) });
 
         let photosHtml = "";
@@ -211,7 +230,7 @@ function renderMarkers() {
                 <span style="color:${color};font-weight:700;">${escHtml(r.severity || "—")}</span>
                 &nbsp;·&nbsp; ${STATUS_LABEL[r.status] || "Pendiente"}
             </div>
-            <div style="margin-top:6px;font-size:.82rem;color:#D4E4F0;line-height:1.4;">${escHtml(r.desc || "")}</div>
+            <div style="margin-top:6px;font-size:.82rem;color:#EFE6E2;line-height:1.4;">${escHtml(r.desc || "")}</div>
             <div class="popup-meta" style="margin-top:6px;">🕐 ${escHtml(r.date)} · 👤 ${escHtml(r.reporter || "Anónimo")}</div>
             ${photosHtml}
         `, { maxWidth: 300 });
@@ -229,7 +248,7 @@ function renderList(highlightFirst = false) {
     }
     container.innerHTML = recent.map((r, i) => `
         <div class="report-item ${highlightFirst && i===0 ? 'new-report' : ''}" onclick="flyTo(${r.lat},${r.lng})">
-            <div class="report-dot" style="background:${SEVER_COLOR[r.severity]||'#8BA5BA'}"></div>
+            <div class="report-dot" style="background:${SEVER_COLOR[r.severity]||'#9C94A8'}"></div>
             <div class="report-info">
                 <strong>${escHtml(r.type)}</strong>
                 <span>${escHtml(r.address)} · ${escHtml(r.date)}</span>
@@ -296,6 +315,7 @@ function updateStats() {
     setStatNum("stat-total",   allReports.length);
     setStatNum("stat-pending", allReports.filter(r => r.status === "pending").length);
     setStatNum("stat-done",    allReports.filter(r => r.status === "done").length);
+    updateAvgResolutionStat();
 }
 
 function setStatNum(id, val) {
@@ -304,6 +324,46 @@ function setStatNum(id, val) {
     const prev = parseInt(el.textContent) || 0;
     el.textContent = val;
     if (prev !== val) {
+        el.classList.add("bump");
+        setTimeout(() => el.classList.remove("bump"), 350);
+    }
+}
+
+/**
+ * Calcula el tiempo promedio de resolución (en horas) entre la creación
+ * de un reporte (timestamp) y el momento en que un operador lo marcó
+ * como resuelto (resolvedAt). Solo cuenta reportes que tienen ambos
+ * datos — los que se resolvieron antes de que existiera este campo no
+ * se pueden calcular retroactivamente, así que se ignoran (mejor "sin
+ * datos" que un número inventado).
+ * @param {object[]} reports
+ * @returns {number|null} Horas promedio, o null si no hay datos suficientes
+ */
+function computeAvgResolutionHours(reports) {
+    const toDate = v => (v && typeof v.toDate === "function") ? v.toDate() : (v ? new Date(v) : null);
+    const resueltos = reports
+        .map(r => ({ start: toDate(r.timestamp), end: toDate(r.resolvedAt) }))
+        .filter(r => r.start && r.end && r.end.getTime() > r.start.getTime());
+
+    if (!resueltos.length) return null;
+    const totalMs = resueltos.reduce((sum, r) => sum + (r.end.getTime() - r.start.getTime()), 0);
+    return totalMs / resueltos.length / 3600000;
+}
+
+/** Actualiza el stat "Resolución promedio" del hero con un valor calculado de verdad. */
+function updateAvgResolutionStat() {
+    const el = document.getElementById("stat-avg");
+    if (!el) return;
+
+    const avgHours = computeAvgResolutionHours(allReports);
+    const html = avgHours == null
+        ? "—"
+        : avgHours < 48
+            ? `${Math.round(avgHours)}<span>h</span>`
+            : `${Math.round(avgHours / 24)}<span>d</span>`;
+
+    if (el.innerHTML !== html) {
+        el.innerHTML = html;
         el.classList.add("bump");
         setTimeout(() => el.classList.remove("bump"), 350);
     }
@@ -347,18 +407,49 @@ function showGPSResult(icon = "✅") {
     updateSteps();
 }
 
+/**
+ * Valida y previsualiza las fotos seleccionadas por el usuario.
+ * Solo se aceptan formatos jpg/png/webp y hasta MAX_PHOTO_MB por archivo
+ * (debe coincidir con "Allowed formats" del preset de Cloudinary).
+ * Las fotos que no pasan la validación se descartan y se avisa al usuario;
+ * el resto queda guardado en selectedPhotoFiles, que es lo que realmente
+ * se envía al backend en el submit del formulario.
+ */
 function handlePhotos(input) {
-    const preview = document.getElementById("photo-preview");
-    const files = Array.from(input.files).slice(0, 5);
+    const preview    = document.getElementById("photo-preview");
+    const candidatos = Array.from(input.files).slice(0, 5);
+
+    const validos    = [];
+    const rechazados = [];
+
+    candidatos.forEach(f => {
+        if (!ALLOWED_PHOTO_TYPES.includes(f.type)) {
+            rechazados.push(`${f.name} (formato no permitido)`);
+            return;
+        }
+        if (f.size > MAX_PHOTO_BYTES) {
+            rechazados.push(`${f.name} (supera ${MAX_PHOTO_MB} MB)`);
+            return;
+        }
+        validos.push(f);
+    });
+
+    selectedPhotoFiles = validos;
+
     preview.innerHTML = "";
-    files.forEach(f => {
+    validos.forEach(f => {
         const url = URL.createObjectURL(f);
         const img = document.createElement("img");
         img.src = url;
         img.className = "photo-thumb";
         preview.appendChild(img);
     });
-    if (files.length) updateSteps();
+
+    if (rechazados.length) {
+        showToast("⚠️", `${rechazados.length} foto(s) rechazada(s): ${rechazados.join(", ")}`);
+    }
+
+    if (validos.length) updateSteps();
 }
 
 function updateSteps() {
@@ -677,8 +768,8 @@ window.addEventListener("load", () => {
         btn.disabled = true;
         btn.innerHTML = "⏳ Guardando en base de datos...";
 
-        const photoInput = document.getElementById("photo-input");
-        const photoFiles = photoInput.files ? Array.from(photoInput.files).slice(0, 5) : [];
+        // Solo se envían las fotos que ya pasaron la validación de formato/tamaño en handlePhotos()
+        const photoFiles = selectedPhotoFiles;
 
         const newReport = {
             type:     document.getElementById("damage-type").value,
@@ -733,6 +824,7 @@ window.addEventListener("load", () => {
         document.getElementById("gps-btn").textContent = "📍 Obtener mi ubicación actual";
         document.getElementById("gps-btn").style.cssText = "";
         document.getElementById("photo-preview").innerHTML = "";
+        selectedPhotoFiles = [];
         selectedSeverity = "";
         userLat = null;
         userLng = null;

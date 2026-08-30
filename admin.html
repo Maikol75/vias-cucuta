@@ -7,11 +7,12 @@
 
 	<!-- Fuentes -->
 	<link rel="preconnect" href="https://fonts.googleapis.com"/>
-	<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 
 	<!-- Leaflet -->
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+	<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
 	<!-- Estilos propios -->
 	<link rel="stylesheet" href="css/admin.css"/>
@@ -84,13 +85,22 @@
 				<div class="n" style="color:var(--green)" id="s-done">—</div>
 				<div class="l">Resueltos</div>
 			</div>
+			<div class="stat-card">
+				<div class="stat-icon">⏱️</div>
+				<div class="n" id="s-avg-time">—</div>
+				<div class="l">Resolución promedio</div>
+			</div>
 		</div>
 
 		<!-- MAPA ADMIN -->
-		<div class="map-section">
+		<div class="map-section" id="map-section">
 			<div class="map-section-header">
 				<div class="map-section-title">🗺️ Distribución geográfica</div>
-				<span class="map-count-tag" id="map-count-tag">Cargando...</span>
+				<div style="display:flex;align-items:center;gap:.75rem;">
+					<span class="map-count-tag" id="map-count-tag">Cargando...</span>
+					<button class="heatmap-btn" id="heatmap-btn" onclick="toggleHeatmap()" title="Alternar mapa de calor">🔥 Mapa de calor</button>
+					<button class="fullscreen-btn" id="fullscreen-btn" onclick="toggleMapFullscreen()" title="Pantalla completa">⛶ Pantalla completa</button>
+				</div>
 			</div>
 			<div id="admin-map"></div>
 		</div>
@@ -115,6 +125,8 @@
 			<button class="filter-btn" data-status="pending">Pendiente</button>
 			<button class="filter-btn" data-status="progress">En proceso</button>
 			<button class="filter-btn" data-status="done">Resuelto</button>
+			<div class="filter-sep"></div>
+			<button class="export-btn" id="export-btn" onclick="exportCSV()" title="Exportar reportes filtrados a CSV">⬇️ Exportar CSV</button>
 		</div>
 
 		<!-- TABLE + PAGINATION -->

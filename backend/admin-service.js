@@ -6,18 +6,33 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
     getFirestore, collection, onSnapshot, query, orderBy,
-    doc, updateDoc, deleteDoc
+    doc, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
     getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+    initializeAppCheck, ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
-import { firebaseConfig, COLLECTION_REPORTES } from "./firebase-config.js";
+import { firebaseConfig, COLLECTION_REPORTES, RECAPTCHA_V3_SITE_KEY } from "./firebase-config.js";
 
 // ─── Inicialización ────────────────────────────────────────────────
 const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
 const auth = getAuth(app);
+
+// App Check también se inicializa aquí: si algún día activas "Enforce"
+// en Firestore, el panel de operador (que también lee/escribe reportes)
+// necesita el mismo token de atestación que el sitio público — estar
+// autenticado con usuario/contraseña no lo reemplaza. Ver los
+// comentarios de RECAPTCHA_V3_SITE_KEY en firebase-config.js.
+if (!firebaseConfig.apiKey.includes("TU_") && !RECAPTCHA_V3_SITE_KEY.includes("TU_")) {
+    initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+        isTokenAutoRefreshEnabled: true
+    });
+}
 
 // ════════════════ AUTH ════════════════════════════════════════════
 
@@ -67,11 +82,19 @@ export function subscribeReportes(onUpdate, onError) {
 
 /**
  * Cambia el estado de un reporte (pending | progress | done).
+ * Si el nuevo estado es "done", además registra `resolvedAt` con la
+ * hora del servidor. Ese campo es lo que permite calcular el tiempo
+ * real de resolución (antes el "72h" del sitio público era un valor
+ * fijo escrito a mano; ahora sale de timestamp → resolvedAt).
  * @param {string} reporteId
  * @param {string} newStatus
  */
 export function updateStatus(reporteId, newStatus) {
-    return updateDoc(doc(db, COLLECTION_REPORTES, reporteId), { status: newStatus });
+    const updates = { status: newStatus };
+    if (newStatus === "done") {
+        updates.resolvedAt = serverTimestamp();
+    }
+    return updateDoc(doc(db, COLLECTION_REPORTES, reporteId), updates);
 }
 
 /**

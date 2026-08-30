@@ -7,7 +7,7 @@
 
 	<!-- Fuentes -->
 	<link rel="preconnect" href="https://fonts.googleapis.com"/>
-	<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 
 	<!-- Leaflet -->
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -49,7 +49,7 @@
 			<div class="stat"><div class="stat-n" id="stat-total">—</div><div class="stat-l">Reportes totales</div></div>
 			<div class="stat"><div class="stat-n" id="stat-pending">—</div><div class="stat-l">Pendientes</div></div>
 			<div class="stat"><div class="stat-n" id="stat-done">—</div><div class="stat-l">Resueltos</div></div>
-			<div class="stat"><div class="stat-n">72<span>h</span></div><div class="stat-l">Respuesta promedio</div></div>
+			<div class="stat"><div class="stat-n" id="stat-avg">—</div><div class="stat-l">Resolución promedio</div></div>
 		</div>
 	</div>
 </section>
@@ -66,9 +66,9 @@
 		<div class="map-sidebar">
 			<div class="map-legend">
 				<h4>Severidad</h4>
-				<div class="legend-item"><div class="legend-dot" style="background:#E05C4A"></div>Crítico — reparación urgente</div>
-				<div class="legend-item"><div class="legend-dot" style="background:#F0A500"></div>Moderado — atención pronta</div>
-				<div class="legend-item"><div class="legend-dot" style="background:#27AE60"></div>Leve — mantenimiento rutinario</div>
+				<div class="legend-item"><div class="legend-dot" style="background:#F0384F"></div>Crítico — reparación urgente</div>
+				<div class="legend-item"><div class="legend-dot" style="background:#FFA726"></div>Moderado — atención pronta</div>
+				<div class="legend-item"><div class="legend-dot" style="background:#2FD480"></div>Leve — mantenimiento rutinario</div>
 			</div>
 
 			<div class="report-list">
@@ -148,10 +148,10 @@
 			<div class="form-group">
 				<label>Foto del daño</label>
 				<div class="photo-upload">
-					<input type="file" id="photo-input" accept="image/*" multiple onchange="handlePhotos(this)"/>
+					<input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" multiple onchange="handlePhotos(this)"/>
 					<div class="photo-upload-icon">📷</div>
 					<p><strong>Haz clic para subir fotos</strong><br/>o arrastra y suelta aquí</p>
-					<p style="font-size:.75rem;margin-top:.3rem;color:var(--gray)">PNG, JPG — máx. 5 fotos</p>
+					<p style="font-size:.75rem;margin-top:.3rem;color:var(--gray)">JPG, PNG, WEBP — máx. 5 fotos, 5 MB c/u</p>
 				</div>
 				<div class="photo-preview" id="photo-preview"></div>
 			</div>

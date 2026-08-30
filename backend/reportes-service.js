@@ -8,10 +8,14 @@ import {
     getFirestore, collection, addDoc,
     onSnapshot, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+    initializeAppCheck, ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
 import {
     firebaseConfig,
-    COLLECTION_REPORTES
+    COLLECTION_REPORTES,
+    RECAPTCHA_V3_SITE_KEY
 } from "./firebase-config.js";
 
 // ─── Configuración de Cloudinary ───────────────────────────────────
@@ -27,6 +31,17 @@ try {
     const app = initializeApp(firebaseConfig);
     db        = getFirestore(app);
     firebaseOK = !firebaseConfig.apiKey.includes("TU_");
+
+    // App Check (anti-bots/spam) — solo se activa si ya pegaste una site
+    // key real en firebase-config.js. Mientras tenga el placeholder "TU_",
+    // esto no hace nada: Firestore sigue funcionando exactamente igual
+    // que antes. Ver los comentarios de RECAPTCHA_V3_SITE_KEY para activarla.
+    if (firebaseOK && !RECAPTCHA_V3_SITE_KEY.includes("TU_")) {
+        initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
+            isTokenAutoRefreshEnabled: true
+        });
+    }
 } catch (e) {
     console.warn("Firebase no configurado, usando modo demo local.", e);
 }
