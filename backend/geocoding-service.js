@@ -141,3 +141,42 @@ function distMeters(lat1, lng1, lat2, lng2) {
         + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
     return R * 2 * Math.asin(Math.sqrt(a));
 }
+
+// Endpoint público de Nominatim para geocodificación inversa (coords → texto)
+const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
+
+/**
+ * Convierte coordenadas lat/lng en una dirección legible (geocodificación inversa).
+ * Se usa cuando el usuario coloca o arrastra el pin manual en el mapa,
+ * para mantener el campo "Dirección aproximada" sincronizado.
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @returns {Promise<string|null>} Dirección legible, o null si falla
+ */
+export async function reverseGeocode(lat, lng) {
+    const params = new URLSearchParams({
+        format:         "json",
+        lat:            String(lat),
+        lon:            String(lng),
+        addressdetails: "1",
+        zoom:           "18"
+    });
+
+    try {
+        const res = await fetch(`${NOMINATIM_REVERSE_URL}?${params}`, {
+            headers: { "Accept-Language": "es" }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data || !data.display_name) return null;
+
+        const parts    = data.display_name.split(",").map(s => s.trim());
+        const mainName = parts[0] || "";
+        const subName  = parts.slice(1, 3).join(", ");
+        return subName ? `${mainName}, ${subName}` : mainName;
+    } catch (err) {
+        console.error("Error en geocodificación inversa:", err);
+        return null;
+    }
+}

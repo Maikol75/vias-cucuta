@@ -10,7 +10,7 @@ import {
     createReporte
 } from "../backend/reportes-service.js";
 
-import { geocodeAddress } from "../backend/geocoding-service.js";
+import { geocodeAddress, reverseGeocode } from "../backend/geocoding-service.js";
 
 /* ──────────── CONSTANTES ──────────── */
 const CUCUTA = [7.8939, -72.5078];
@@ -92,6 +92,7 @@ function setUserPin(lat, lng) {
             userLng = pos.lng.toFixed(5);
             document.getElementById("gps-coords").textContent = `${userLat}, ${userLng}`;
             updateSteps();
+            updateAddressFromCoords(pos.lat, pos.lng);
         });
     }
     userLat = lat.toFixed(5);
@@ -112,7 +113,10 @@ function enablePinMode() {
     document.getElementById("pin-hint").classList.add("show");
     map.getContainer().style.cursor = "crosshair";
     document.getElementById("mapa").scrollIntoView({ behavior: "smooth" });
-    mapClickFn = e => setUserPin(e.latlng.lat, e.latlng.lng);
+    mapClickFn = e => {
+        setUserPin(e.latlng.lat, e.latlng.lng);
+        updateAddressFromCoords(e.latlng.lat, e.latlng.lng);
+    };
     map.on("click", mapClickFn);
 }
 
@@ -129,6 +133,29 @@ function disablePinMode() {
 function clearUserPin() {
     if (userPin) { map.removeLayer(userPin); userPin = null; }
     disablePinMode();
+}
+
+/**
+ * Geocodificación inversa: cuando el usuario coloca o arrastra el pin manual,
+ * actualiza el campo "Dirección aproximada" con el nombre del lugar más cercano,
+ * igual que ya ocurre al elegir una sugerencia del autocompletado.
+ */
+async function updateAddressFromCoords(lat, lng) {
+    const addressInput = document.getElementById("address");
+    if (!addressInput) return;
+    const previousValue = addressInput.value;
+
+    addressInput.value = "Buscando dirección...";
+    const result = await reverseGeocode(lat, lng);
+
+    if (result) {
+        suppressNextSearch = true;
+        addressInput.value = result;
+    } else {
+        addressInput.value = previousValue;
+        showToast("⚠️", "No se pudo obtener la dirección para ese punto");
+    }
+    updateSteps();
 }
 
 /* ──────────── INTEGRACIÓN BACKEND ──────────── */
