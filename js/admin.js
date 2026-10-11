@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════
-//  VíasCúcuta — Frontend del Panel de Operador (admin.html)
+//  MiVía — Frontend del Panel de Operador (admin.html)
 //  Solo lógica de UI, mapa, tabla, filtros y modales.
-//  El acceso a Firebase se delega 100% en /backend/admin-service.js
+//  El acceso a datos se delega 100% en /backend/admin-service.js
 // ══════════════════════════════════════════════════════════════════
 
 import {
@@ -16,7 +16,7 @@ import {
 /* ──────────── CONSTANTES ──────────── */
 const CUCUTA       = [7.8939, -72.5078];
 const SEV_LABEL    = { critico:'🔴 Crítico', moderado:'🟠 Moderado', leve:'🟡 Leve' };
-const STATUS_LABEL = { pending:'Pendiente', progress:'En proceso', done:'Resuelto' };
+const STATUS_LABEL = { pending:'Pendiente', progress:'En proceso', done:'Resuelto', rejected:'Rechazado' };
 // Colores de severidad — deben coincidir con las variables --coral/--gold/--green de admin.css
 const SEVER_COLOR  = { critico:'#F0384F', moderado:'#FFA726', leve:'#2FD480' };
 // Peso de cada severidad para la intensidad del mapa de calor
@@ -30,12 +30,24 @@ let searchTerm     = '';
 let currentPage    = 1;
 const PAGE_SIZE    = 10;
 let currentId      = null;
-let firestoreUnsub = null;
+let reportesUnsub = null;
 let adminMap, adminMarkersLayer;
 let heatLayer      = null;
 let heatmapMode    = false;
 
 /* ──────────── HELPERS ──────────── */
+
+/** Escapa texto que escribió un ciudadano antes de meterlo en el HTML */
+function escHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function toJsDate(ts) {
     if (!ts) return null;
     if (typeof ts.toDate === "function") return ts.toDate();
@@ -51,7 +63,7 @@ function timeAgo(ts) {
     if (s < 60)    return 'Hace un momento';
     if (s < 3600)  return `Hace ${Math.floor(s / 60)} min`;
     if (s < 86400) return `Hace ${Math.floor(s / 3600)} h`;
-    return `Hace ${Math.floor(s / 86400)} días`;
+    { const d = Math.floor(s / 86400); return `Hace ${d} ${d === 1 ? 'día' : 'días'}`; }
 }
 
 /** Formatea una fecha completa (para exportaciones) en formato es-CO */
@@ -93,36 +105,32 @@ function showPanel(user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('panel').style.display = 'block';
     document.getElementById('nav-email').textContent = user.email;
-    initAdminMap();
-    startFirestore();
+    if (!adminMap) initAdminMap();
+    else setTimeout(() => adminMap.invalidateSize(), 50);
+    iniciarReportes();
 }
 
 function showLogin() {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('panel').style.display = 'none';
-    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    if (reportesUnsub) { reportesUnsub(); reportesUnsub = null; }
 }
 
 async function doLogin() {
-    const email = document.getElementById('login-email').value.trim();
-    const pass  = document.getElementById('login-pass').value;
-    const btn   = document.getElementById('login-btn');
-    const err   = document.getElementById('login-error');
-    if (!email || !pass) { err.textContent = 'Completa todos los campos.'; return; }
+    const usuario = document.getElementById('login-user').value.trim();
+    const pass    = document.getElementById('login-pass').value;
+    const btn     = document.getElementById('login-btn');
+    const err     = document.getElementById('login-error');
+    if (!usuario || !pass) { err.textContent = 'Completa todos los campos.'; return; }
     btn.disabled = true;
     btn.textContent = '⏳ Verificando...';
     err.textContent = '';
     try {
-        await login(email, pass);
+        await login(usuario, pass);
+        // onAuthChange abre el panel si el usuario es moderador o admin
     } catch (e) {
-        const msgs = {
-            'auth/user-not-found':     'Usuario no encontrado.',
-            'auth/wrong-password':     'Contraseña incorrecta.',
-            'auth/invalid-email':      'Correo inválido.',
-            'auth/invalid-credential': 'Credenciales incorrectas.',
-            'auth/too-many-requests':  'Demasiados intentos. Intenta más tarde.',
-        };
-        err.textContent = msgs[e.code] || `Error: ${e.message}`;
+        err.textContent = e.message || 'No se pudo iniciar sesión.';
+    } finally {
         btn.disabled = false;
         btn.textContent = '🔐 Ingresar al panel';
     }
@@ -133,10 +141,11 @@ async function doLogout() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   FIRESTORE — sincronización en tiempo real
+   SUPABASE — sincronización en tiempo real
 ══════════════════════════════════════════════════════════════ */
-function startFirestore() {
-    firestoreUnsub = subscribeReportes(reportes => {
+function iniciarReportes() {
+    if (reportesUnsub) reportesUnsub();
+    reportesUnsub = subscribeReportes(reportes => {
         const prevCount = allReports.length;
         allReports = reportes;
         if (prevCount > 0 && allReports.length > prevCount) {
@@ -147,7 +156,7 @@ function startFirestore() {
         renderAdminMarkers();
         renderHeatPoints();
     }, () => {
-        showToast('❌', 'Error al leer Firestore. Revisa reglas de seguridad.');
+        showToast('❌', 'Error al leer los reportes. Revisa la conexión.');
     });
 }
 
@@ -217,8 +226,8 @@ function renderAdminMarkers() {
         const color = SEVER_COLOR[r.severity] || '#9C94A8';
         const m = L.marker([r.lat, r.lng], { icon: makeAdminIcon(color) });
         m.bindPopup(`
-            <div class="popup-name">${r.type || '—'}</div>
-            <div class="popup-meta">📍 ${r.address || '—'}</div>
+            <div class="popup-name">${escHtml(r.type) || '—'}</div>
+            <div class="popup-meta">📍 ${escHtml(r.address) || '—'}</div>
             <div class="popup-meta">${SEV_LABEL[r.severity] || '—'} &nbsp;·&nbsp; ${STATUS_LABEL[r.status] || '—'}</div>
             <div class="popup-meta">🕐 ${timeAgo(r.timestamp)}</div>
             <a class="popup-link" onclick="event.preventDefault();openModal('${r.id}');" href="#">Ver detalle →</a>
@@ -342,8 +351,8 @@ function renderTable() {
     } else {
         tbody.innerHTML = page.map(r => `
             <tr onclick="openModal('${r.id}')">
-                <td class="td-type">${r.type || '—'}</td>
-                <td class="td-addr" title="${r.address || ''}">${r.address || '—'}</td>
+                <td class="td-type">${escHtml(r.type) || '—'}</td>
+                <td class="td-addr" title="${escHtml(r.address)}">${escHtml(r.address) || '—'}</td>
                 <td><span class="badge badge-${r.severity}">${SEV_LABEL[r.severity] || r.severity}</span></td>
                 <td><span class="badge badge-${r.status}">${STATUS_LABEL[r.status] || r.status}</span></td>
                 <td>${r.photos && r.photos.length
@@ -351,7 +360,7 @@ function renderTable() {
             : `<span style="color:var(--gray);font-size:.8rem;">—</span>`}
                 </td>
                 <td class="td-date">${timeAgo(r.timestamp)}</td>
-                <td class="td-date">${r.reporter || 'Anónimo'}</td>
+                <td class="td-date">${escHtml(r.reporter) || 'Anónimo'}</td>
             </tr>
         `).join('');
     }
@@ -429,7 +438,7 @@ function exportCSV() {
     const a    = document.createElement('a');
     const fecha = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `vias-cucuta-reportes-${fecha}.csv`;
+    a.download = `mivia-reportes-${fecha}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -484,7 +493,7 @@ function openModal(id) {
     });
 
     const dz = document.getElementById('delete-zone');
-    dz.classList.toggle('show', r.status === 'done');
+    dz.classList.toggle('show', r.status === 'done' || r.status === 'rejected');
     cancelDelete();
 
     if (r.lat && r.lng) flyToReport(r.lat, r.lng);
@@ -510,13 +519,14 @@ function cancelDelete() {
 
 async function confirmDelete() {
     if (!currentId) return;
+    const r = allReports.find(x => x.id === currentId);
     try {
-        await deleteReporte(currentId);
+        await deleteReporte(currentId, r?.photoPaths || []);
         showToast('🗑️', 'Reporte eliminado correctamente');
         closeModal();
     } catch (e) {
         console.error(e);
-        showToast('❌', 'Error al eliminar. Revisa las reglas de Firestore.');
+        showToast('❌', e.message || 'Error al eliminar el reporte.');
         cancelDelete();
     }
 }
@@ -532,7 +542,7 @@ async function setStatus(newStatus) {
         closeModal();
     } catch (e) {
         console.error(e);
-        showToast('❌', 'Error al actualizar. Revisa las reglas de Firestore.');
+        showToast('❌', e.message || 'Error al actualizar el estado.');
     }
 }
 
@@ -584,6 +594,9 @@ window.addEventListener('load', () => {
     onAuthChange(user => {
         if (user) showPanel(user);
         else      showLogin();
+    }, mensaje => {
+        showLogin();
+        document.getElementById('login-error').textContent = mensaje;
     });
 
     // Filtros por severidad

@@ -1,13 +1,14 @@
 // ══════════════════════════════════════════════════════════════════
-//  VíasCúcuta — Frontend ciudadano (index.html)
+//  MiVía — Frontend ciudadano (index.html)
 //  Solo lógica de UI, mapa, formulario y validaciones.
 //  El acceso a datos se delega 100% en /backend/reportes-service.js
 // ══════════════════════════════════════════════════════════════════
 
 import {
-    isFirebaseReady,
+    isSupabaseReady,
     subscribeReportes,
-    createReporte
+    createReporte,
+    getCategorias
 } from "../backend/reportes-service.js";
 
 import { geocodeAddress, reverseGeocode } from "../backend/geocoding-service.js";
@@ -20,15 +21,13 @@ const STATUS_LABEL = { pending:"Pendiente", progress:"En proceso", done:"Resuelt
 const STATUS_CLASS = { pending:"badge-pending", progress:"badge-progress", done:"badge-done" };
 const STATUS_LABEL_DUP = { pending:'⏳ Pendiente', progress:'🔧 En proceso' };
 
-// Validación de fotos — debe coincidir con lo configurado en el preset de Cloudinary
-// (Allowed formats: jpg,png,webp). El límite de tamaño es un respaldo del lado
-// del cliente para dar feedback inmediato, ya que la consola de Cloudinary no
-// siempre expone un campo de "Max file size" fácil de ubicar según la versión.
+// Validación de fotos antes de subirlas. Las fotos válidas se reducen en el
+// navegador (backend/reportes-service.js) antes de enviarlas a Supabase Storage.
 const MAX_PHOTO_MB        = 5;
 const MAX_PHOTO_BYTES     = MAX_PHOTO_MB * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// Reportes de ejemplo para el modo demo (sin Firebase configurado).
+// Reportes de ejemplo para el modo demo (sin Supabase configurado).
 // RPT-004 y RPT-006 incluyen timestamp/resolvedAt para que el stat de
 // "Resolución promedio" también funcione con datos reales en demo.
 const SAMPLE = [
@@ -51,7 +50,7 @@ let selectedSeverity  = "";
 let userLat           = null;
 let userLng           = null;
 let map, markersLayer;
-let firebaseReady     = false;
+let backendReady      = false;
 
 // Fotos válidas seleccionadas por el usuario (tras pasar la validación de handlePhotos)
 let selectedPhotoFiles = [];
@@ -160,7 +159,7 @@ async function updateAddressFromCoords(lat, lng) {
 
 /* ──────────── INTEGRACIÓN BACKEND ──────────── */
 function setupBackend() {
-    if (!isFirebaseReady()) {
+    if (!isSupabaseReady()) {
         document.getElementById("setup-banner").classList.add("show");
         // Modo demo: cargar reportes de ejemplo
         allReports = [...SAMPLE];
@@ -170,18 +169,20 @@ function setupBackend() {
         return;
     }
 
-    firebaseReady = true;
+    backendReady = true;
     const badge = document.getElementById("db-badge");
-    badge.textContent = "🟢 Firebase en vivo";
+    badge.textContent = "🟢 Supabase en vivo";
     badge.classList.remove("offline");
+
+    cargarCategorias();
 
     let isFirstLoad = true;
     subscribeReportes(reportes => {
         const prevCount = allReports.length;
-        allReports = reportes.map(r => ({
-            ...r,
-            date: timeAgo(r.timestamp?.toDate?.())
-        }));
+        // Los reportes rechazados (duplicados, falsos...) no se muestran al público
+        allReports = reportes
+            .filter(r => r.status !== "rejected")
+            .map(r => ({ ...r, date: timeAgo(r.timestamp) }));
 
         const isNew = !isFirstLoad && allReports.length > prevCount;
         if (isNew) {
@@ -199,7 +200,26 @@ function setupBackend() {
             lu.style.display = "flex";
             luTime.textContent = new Date().toLocaleTimeString("es-CO", { hour:"2-digit", minute:"2-digit" });
         }
+    }, () => {
+        showToast("❌", "No se pudieron cargar los reportes. Revisa tu conexión.");
     });
+}
+
+/**
+ * Reemplaza las opciones fijas del selector "Tipo de daño" por las
+ * categorías de la base de datos (las mismas que usa la app móvil).
+ */
+async function cargarCategorias() {
+    const select = document.getElementById("damage-type");
+    try {
+        const categorias = await getCategorias();
+        if (!categorias.length) return;
+        select.innerHTML = '<option value="">Selecciona el tipo de daño...</option>' +
+            categorias.map(c => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join("");
+    } catch (e) {
+        console.error("No se pudieron cargar las categorías:", e);
+        showToast("⚠️", "No se pudieron cargar los tipos de daño");
+    }
 }
 
 function timeAgo(date) {
@@ -208,7 +228,7 @@ function timeAgo(date) {
     if (s < 60)    return "Hace un momento";
     if (s < 3600)  return `Hace ${Math.floor(s/60)} min`;
     if (s < 86400) return `Hace ${Math.floor(s/3600)} h`;
-    return `Hace ${Math.floor(s/86400)} días`;
+    { const d = Math.floor(s/86400); return `Hace ${d} ${d === 1 ? "día" : "días"}`; }
 }
 
 /* ──────────── MAPA ──────────── */
@@ -414,6 +434,13 @@ function getGPS() {
         showGPSResult();
     };
     const onError = () => {
+        if (backendReady) {
+            // Con datos reales no se inventa una ubicación: se pide marcarla a mano
+            btn.textContent = "📍 Mi ubicación";
+            btn.disabled = false;
+            showToast("📍", "No se pudo obtener tu ubicación. Usa \"Marcar en el mapa\".");
+            return;
+        }
         userLat = (7.8939 + (Math.random()-.5)*.02).toFixed(5);
         userLng = (-72.5078 + (Math.random()-.5)*.02).toFixed(5);
         showGPSResult();
@@ -436,8 +463,7 @@ function showGPSResult(icon = "✅") {
 
 /**
  * Valida y previsualiza las fotos seleccionadas por el usuario.
- * Solo se aceptan formatos jpg/png/webp y hasta MAX_PHOTO_MB por archivo
- * (debe coincidir con "Allowed formats" del preset de Cloudinary).
+ * Solo se aceptan formatos jpg/png/webp y hasta MAX_PHOTO_MB por archivo.
  * Las fotos que no pasan la validación se descartan y se avisa al usuario;
  * el resto queda guardado en selectedPhotoFiles, que es lo que realmente
  * se envía al backend en el submit del formulario.
@@ -778,6 +804,10 @@ window.addEventListener("load", () => {
 
         if (!checkRateLimit()) return;
         if (!document.getElementById("damage-type").value) { showToast("⚠️","Selecciona el tipo de daño"); return; }
+        if (backendReady && !parseInt(document.getElementById("damage-type").value)) {
+            showToast("⚠️", "Los tipos de daño no cargaron. Recarga la página.");
+            return;
+        }
         if (!selectedSeverity)  { showToast("⚠️","Selecciona la severidad"); return; }
         if (!userLat || !userLng) { showToast("📍","Captura tu ubicación GPS primero"); return; }
 
@@ -798,8 +828,10 @@ window.addEventListener("load", () => {
         // Solo se envían las fotos que ya pasaron la validación de formato/tamaño en handlePhotos()
         const photoFiles = selectedPhotoFiles;
 
+        const tipoSelect = document.getElementById("damage-type");
         const newReport = {
-            type:     document.getElementById("damage-type").value,
+            categoriaId: parseInt(tipoSelect.value) || null,
+            type:     tipoSelect.options[tipoSelect.selectedIndex].text,
             address:  document.getElementById("address").value,
             desc:     document.getElementById("description").value || "Sin descripción adicional.",
             severity: selectedSeverity,
@@ -811,16 +843,20 @@ window.addEventListener("load", () => {
         };
 
         let docId;
-        if (firebaseReady) {
+        if (backendReady) {
             try {
                 if (photoFiles.length) {
-                    btn.innerHTML = `⏳ Subiendo ${photoFiles.length} foto(s)...`;
+                    btn.innerHTML = `⏳ Guardando y subiendo ${photoFiles.length} foto(s)...`;
                 }
-                docId = await createReporte(newReport, photoFiles);
-                document.getElementById("modal-db-note").textContent = "✅ Guardado en Firebase — todos los usuarios lo verán al instante";
+                const res = await createReporte(newReport, photoFiles);
+                docId = res.id;
+                const faltan = photoFiles.length - res.fotosSubidas;
+                document.getElementById("modal-db-note").textContent = faltan > 0
+                    ? `⚠️ Reporte guardado, pero ${faltan} foto(s) no se pudieron subir`
+                    : "✅ Guardado en MiVía — todos los usuarios lo verán al instante";
             } catch (err) {
                 console.error(err);
-                showToast("❌", "Error al guardar en Firebase. Revisa las reglas de seguridad.");
+                showToast("❌", "No se pudo guardar el reporte. Revisa tu conexión e inténtalo de nuevo.");
                 btn.disabled = false;
                 btn.innerHTML = "📤 Enviar reporte a la base de datos";
                 return;
@@ -840,7 +876,7 @@ window.addEventListener("load", () => {
         }
 
         markRateLimit();
-        document.getElementById("modal-id").textContent = `ID: ${docId}`;
+        document.getElementById("modal-id").textContent = `Reporte #${docId}`;
         document.getElementById("modal").classList.add("show");
 
         btn.disabled = false;

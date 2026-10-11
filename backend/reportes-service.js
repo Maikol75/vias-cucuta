@@ -1,121 +1,174 @@
 // ══════════════════════════════════════════════════════════════════
-//  VíasCúcuta — Servicio de Reportes (vista ciudadana)
-//  Capa de acceso a datos: Firestore (reportes) + Cloudinary (fotos)
+//  MiVía — Servicio de Reportes (vista ciudadana)
+//  Capa de acceso a datos: Supabase (base de datos + fotos en Storage)
+//  Expone las mismas funciones que la versión con Firebase.
 // ══════════════════════════════════════════════════════════════════
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-    getFirestore, collection, addDoc,
-    onSnapshot, query, orderBy, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import {
-    initializeAppCheck, ReCaptchaV3Provider
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+    supabase,
+    isSupabaseReady,
+    escucharReportes,
+    recargarReportes,
+    SEV_WEB_A_DB
+} from "./supabase-client.js";
+import { BUCKET_FOTOS, FOTO_LADO_MAX_PX, FOTO_CALIDAD_JPEG } from "./supabase-config.js";
 
-import {
-    firebaseConfig,
-    COLLECTION_REPORTES,
-    RECAPTCHA_V3_SITE_KEY
-} from "./firebase-config.js";
-
-// ─── Configuración de Cloudinary ───────────────────────────────────
-const CLOUDINARY_CLOUD_NAME    = "denpau9b7";
-const CLOUDINARY_UPLOAD_PRESET = "vias_cucuta";
-const CLOUDINARY_FOLDER        = "reportes";
-
-// ─── Inicialización de Firebase ────────────────────────────────────
-let db         = null;
-let firebaseOK = false;
-
-try {
-    const app = initializeApp(firebaseConfig);
-    db        = getFirestore(app);
-    firebaseOK = !firebaseConfig.apiKey.includes("TU_");
-
-    // App Check (anti-bots/spam) — solo se activa si ya pegaste una site
-    // key real en firebase-config.js. Mientras tenga el placeholder "TU_",
-    // esto no hace nada: Firestore sigue funcionando exactamente igual
-    // que antes. Ver los comentarios de RECAPTCHA_V3_SITE_KEY para activarla.
-    if (firebaseOK && !RECAPTCHA_V3_SITE_KEY.includes("TU_")) {
-        initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
-            isTokenAutoRefreshEnabled: true
-        });
-    }
-} catch (e) {
-    console.warn("Firebase no configurado, usando modo demo local.", e);
-}
+export { isSupabaseReady };
 
 /**
- * Indica si Firebase está listo y configurado correctamente.
+ * Suscribe un listener en tiempo real a los reportes.
+ * @param {(reportes: object[]) => void} onUpdate
+ * @param {(error: Error) => void}      [onError]
+ * @returns {() => void} Función para cancelar la suscripción
  */
-export function isFirebaseReady() {
-    return firebaseOK;
+export function subscribeReportes(onUpdate, onError) {
+    return escucharReportes(onUpdate, onError);
 }
 
-/**
- * Suscribe un listener en tiempo real a la colección de reportes.
- * @param {(reportes: object[]) => void} onUpdate  Callback con la lista actualizada
- * @returns {() => void}                            Función para cancelar la suscripción
- */
-export function subscribeReportes(onUpdate) {
-    if (!db) return () => {};
-    const q = query(collection(db, COLLECTION_REPORTES), orderBy("timestamp", "desc"));
-    return onSnapshot(q, snapshot => {
-        const reportes = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        onUpdate(reportes);
-    });
+/** Categorías de daño activas (las mismas que ve la app). */
+export async function getCategorias() {
+    const { data, error } = await supabase
+        .from("categorias")
+        .select("id, nombre, icono")
+        .eq("activa", true)
+        .order("id");
+    if (error) throw error;
+    return data;
 }
 
+// ─── Ciudades (para asignar cada reporte a la más cercana) ─────────
+let ciudadesCache = null;
+
+async function getCiudades() {
+    if (ciudadesCache) return ciudadesCache;
+    const { data, error } = await supabase
+        .from("ciudades")
+        .select("id, nombre, lat_centro, lng_centro")
+        .eq("activa", true);
+    if (error) throw error;
+    if (!data.length) throw new Error("No hay ciudades activas en la base de datos.");
+    ciudadesCache = data;
+    return data;
+}
+
+function distanciaKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const rad = x => x * Math.PI / 180;
+    const dLat = rad(lat2 - lat1);
+    const dLng = rad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+async function ciudadMasCercana(lat, lng) {
+    const ciudades = await getCiudades();
+    return ciudades.reduce((mejor, c) =>
+        distanciaKm(lat, lng, c.lat_centro, c.lng_centro) <
+        distanciaKm(lat, lng, mejor.lat_centro, mejor.lng_centro) ? c : mejor
+    );
+}
+
+// ─── Fotos ─────────────────────────────────────────────────────────
+
 /**
- * Sube una foto a Cloudinary usando unsigned upload.
- * Devuelve la URL segura (HTTPS) de la imagen.
+ * Reduce la foto en el navegador (máx. 1280 px, JPEG) para no pasar
+ * del límite de 2 MB del bucket y ahorrar el almacenamiento gratuito.
  * @param {File} file
- * @returns {Promise<string>}
+ * @returns {Promise<Blob>}
  */
-async function uploadOnePhotoToCloudinary(file) {
-    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    if (CLOUDINARY_FOLDER) formData.append("folder", CLOUDINARY_FOLDER);
-
-    const res = await fetch(url, { method: "POST", body: formData });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Cloudinary upload falló (${res.status}): ${errText}`);
-    }
-    const data = await res.json();
-    return data.secure_url;
+async function comprimirFoto(file) {
+    const bitmap = await createImageBitmap(file);
+    const escala = Math.min(1, FOTO_LADO_MAX_PX / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.round(bitmap.width * escala);
+    canvas.height = Math.round(bitmap.height * escala);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return new Promise((resolve, reject) =>
+        canvas.toBlob(
+            b => b ? resolve(b) : reject(new Error("No se pudo procesar la foto")),
+            "image/jpeg",
+            FOTO_CALIDAD_JPEG
+        )
+    );
 }
 
 /**
- * Sube un conjunto de fotos a Cloudinary y devuelve sus URLs.
+ * Sube las fotos de un reporte a Supabase Storage y las enlaza al reporte.
+ * @param {number} reporteId
+ * @param {string} carpeta   uid del usuario, o "anonimo"
  * @param {File[]} files
- * @returns {Promise<string[]>}
+ * @returns {Promise<number>} cuántas fotos se subieron
  */
-export async function uploadPhotos(files) {
-    if (!files?.length) return [];
-    return Promise.all(files.map(uploadOnePhotoToCloudinary));
+export async function uploadPhotos(reporteId, carpeta, files) {
+    if (!files?.length) return 0;
+    const rutas = [];
+    for (let i = 0; i < files.length; i++) {
+        try {
+            const blob = await comprimirFoto(files[i]);
+            const ruta = `${carpeta}/${reporteId}/${i + 1}.jpg`;
+            const { error } = await supabase.storage
+                .from(BUCKET_FOTOS)
+                .upload(ruta, blob, { contentType: "image/jpeg", upsert: false });
+            if (error) throw error;
+            rutas.push(ruta);
+        } catch (e) {
+            console.error(`No se pudo subir la foto ${i + 1}:`, e);
+        }
+    }
+    if (rutas.length) {
+        const { error } = await supabase
+            .from("reporte_fotos")
+            .insert(rutas.map(ruta => ({ reporte_id: reporteId, ruta })));
+        if (error) throw error;
+    }
+    return rutas.length;
 }
 
+// ─── Crear reporte ─────────────────────────────────────────────────
+
 /**
- * Crea un nuevo reporte en Firestore. Si recibe archivos los sube a Cloudinary primero.
- * @param {object} report     Datos del reporte (sin id ni timestamp)
- * @param {File[]} photoFiles Archivos de fotos a subir
- * @returns {Promise<string>} ID del documento creado
+ * Crea un nuevo reporte. Funciona con o sin sesión iniciada:
+ * sin sesión queda como reporte anónimo con el nombre que escribió la persona.
+ *
+ * @param {object} report  { categoriaId, type, address, desc, severity, lat, lng, reporter }
+ * @param {File[]} photoFiles
+ * @returns {Promise<{id: string, fotosSubidas: number}>}
  */
 export async function createReporte(report, photoFiles = []) {
-    if (!db) throw new Error("Firestore no inicializado");
-    const photoUrls = await uploadPhotos(photoFiles);
-    const docRef = await addDoc(collection(db, COLLECTION_REPORTES), {
-        ...report,
-        photos:    photoUrls,
-        timestamp: serverTimestamp()
-    });
-    return docRef.id;
+    if (!supabase) throw new Error("Supabase no está configurado");
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? null;
+
+    const ciudad = await ciudadMasCercana(report.lat, report.lng);
+
+    // La BD exige una descripción de 10 a 1000 caracteres
+    let descripcion = (report.desc || "").trim();
+    if (descripcion.length < 10) {
+        descripcion = `${report.type}: ${descripcion || "sin descripción adicional"}`;
+    }
+    descripcion = descripcion.slice(0, 1000);
+
+    const { data, error } = await supabase
+        .from("reportes")
+        .insert({
+            usuario_id:       uid,
+            ciudad_id:        ciudad.id,
+            categoria_id:     report.categoriaId,
+            descripcion,
+            severidad:        SEV_WEB_A_DB[report.severity] || "media",
+            lat:              report.lat,
+            lng:              report.lng,
+            direccion:        report.address || null,
+            reportero_nombre: report.reporter || null
+        })
+        .select("id")
+        .single();
+    if (error) throw error;
+
+    const fotosSubidas = await uploadPhotos(data.id, uid ?? "anonimo", photoFiles);
+    recargarReportes();
+    return { id: String(data.id), fotosSubidas };
 }

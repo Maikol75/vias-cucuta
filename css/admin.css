@@ -224,6 +224,7 @@ tbody td { padding:.85rem 1.2rem; font-size:.875rem; vertical-align:middle; }
 .badge-pending  { color:var(--gold);       background:rgba(255,167,38,.12);  border-color:rgba(255,167,38,.3); }
 .badge-progress { color:var(--teal-light); background:rgba(255,107,74,.12); border-color:rgba(255,107,74,.3); }
 .badge-done     { color:var(--green);      background:rgba(47,212,128,.12);  border-color:rgba(47,212,128,.3); }
+.badge-rejected { color:var(--gray);       background:rgba(156,148,168,.12); border-color:rgba(156,148,168,.3); }
 .badge-critico  { color:var(--coral);      background:rgba(240,56,79,.12);  border-color:rgba(240,56,79,.3); }
 .badge-moderado { color:var(--gold);       background:rgba(255,167,38,.12);  border-color:rgba(255,167,38,.3); }
 .badge-leve     { color:var(--green);      background:rgba(47,212,128,.12);  border-color:rgba(47,212,128,.3); }

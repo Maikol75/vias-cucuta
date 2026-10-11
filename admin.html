@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-	<title>VíasCúcuta — Panel Operador</title>
+	<title>MiVía — Panel Operador</title>
 
 	<!-- Fuentes -->
 	<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -24,12 +24,12 @@
 	<div class="login-box">
 		<div class="login-logo">
 			<div style="font-size:2.5rem;margin-bottom:.5rem;">🛠️</div>
-			<h1>Panel <span>Vías</span><em>Cúcuta</em></h1>
+			<h1>Panel <span>Mi</span><em>Vía</em></h1>
 			<p>Acceso exclusivo para operadores autorizados</p>
 		</div>
 		<div class="login-group">
-			<label>Correo electrónico</label>
-			<input type="email" id="login-email" placeholder="operador@correo.com" autocomplete="email"/>
+			<label>Usuario</label>
+			<input type="text" id="login-user" placeholder="tu_usuario" autocomplete="username" autocapitalize="none" spellcheck="false"/>
 		</div>
 		<div class="login-group">
 			<label>Contraseña</label>
@@ -60,7 +60,7 @@
 				<h1>Panel de Operador</h1>
 				<p>Gestiona y actualiza el estado de los reportes ciudadanos en tiempo real</p>
 			</div>
-			<div class="live-badge">🔴 Firebase en vivo</div>
+			<div class="live-badge">🔴 Supabase en vivo</div>
 		</div>
 
 		<!-- STATS -->
@@ -125,6 +125,7 @@
 			<button class="filter-btn" data-status="pending">Pendiente</button>
 			<button class="filter-btn" data-status="progress">En proceso</button>
 			<button class="filter-btn" data-status="done">Resuelto</button>
+			<button class="filter-btn" data-status="rejected">Rechazado</button>
 			<div class="filter-sep"></div>
 			<button class="export-btn" id="export-btn" onclick="exportCSV()" title="Exportar reportes filtrados a CSV">⬇️ Exportar CSV</button>
 		</div>
@@ -204,10 +205,10 @@
 
 			<!-- Zona de eliminación — solo visible cuando status = done -->
 			<div class="delete-zone" id="delete-zone">
-				<p class="delete-hint">Este reporte está marcado como <strong>Resuelto</strong>. Puedes eliminarlo permanentemente de la base de datos.</p>
+				<p class="delete-hint">Este reporte está <strong>resuelto o rechazado</strong>. Puedes eliminarlo permanentemente de la base de datos.</p>
 				<button class="btn-delete" onclick="promptDelete()">🗑️ Eliminar reporte</button>
 				<div class="confirm-zone" id="confirm-zone">
-					<p class="confirm-msg">¿Confirmar eliminación? Esta acción <strong>no se puede deshacer</strong> y borrará el reporte y sus datos de Firestore.</p>
+					<p class="confirm-msg">¿Confirmar eliminación? Esta acción <strong>no se puede deshacer</strong> y borrará el reporte, su historial y sus fotos.</p>
 					<div class="confirm-btns">
 						<button class="confirm-no"  onclick="cancelDelete()">Cancelar</button>
 						<button class="confirm-yes" onclick="confirmDelete()">Sí, eliminar</button>
