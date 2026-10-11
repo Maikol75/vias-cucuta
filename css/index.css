@@ -158,6 +158,7 @@ h1 em   { color:var(--gold); font-style:normal; }
 .report-info span { font-size:.78rem; color:var(--gray); }
 .report-badge { font-size:.7rem; padding:.2rem .55rem; border-radius:99px; font-weight:600; white-space:nowrap; }
 .badge-pending  { background:rgba(255,167,38,.15);  color:var(--gold); }
+.badge-review   { background:rgba(79,163,255,.15);  color:#4FA3FF; }
 .badge-progress { background:rgba(255,107,74,.15); color:var(--teal-light); }
 .badge-done     { background:rgba(47,212,128,.15);  color:var(--green); }
 

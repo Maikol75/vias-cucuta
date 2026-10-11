@@ -78,12 +78,12 @@
 			<div class="stat-card">
 				<div class="stat-icon">🔧</div>
 				<div class="n" style="color:var(--teal-light)" id="s-progress">—</div>
-				<div class="l">En proceso</div>
+				<div class="l">En revisión o reparación</div>
 			</div>
 			<div class="stat-card">
 				<div class="stat-icon">✅</div>
 				<div class="n" style="color:var(--green)" id="s-done">—</div>
-				<div class="l">Resueltos</div>
+				<div class="l">Reparados</div>
 			</div>
 			<div class="stat-card">
 				<div class="stat-icon">⏱️</div>
@@ -118,13 +118,14 @@
 			<button class="filter-btn active" data-sev="todos">Todos</button>
 			<button class="filter-btn" data-sev="critico">🔴 Crítico</button>
 			<button class="filter-btn" data-sev="moderado">🟠 Moderado</button>
-			<button class="filter-btn" data-sev="leve">🟡 Leve</button>
+			<button class="filter-btn" data-sev="leve">🟢 Leve</button>
 			<div class="filter-sep"></div>
 			<span class="filter-label">Estado:</span>
 			<button class="filter-btn active" data-status="todos">Todos</button>
 			<button class="filter-btn" data-status="pending">Pendiente</button>
-			<button class="filter-btn" data-status="progress">En proceso</button>
-			<button class="filter-btn" data-status="done">Resuelto</button>
+			<button class="filter-btn" data-status="review">En revisión</button>
+			<button class="filter-btn" data-status="progress">En reparación</button>
+			<button class="filter-btn" data-status="done">Reparado</button>
 			<button class="filter-btn" data-status="rejected">Rechazado</button>
 			<div class="filter-sep"></div>
 			<button class="export-btn" id="export-btn" onclick="exportCSV()" title="Exportar reportes filtrados a CSV">⬇️ Exportar CSV</button>
@@ -199,13 +200,15 @@
 
 			<div class="status-actions">
 				<button class="status-btn pending"  id="btn-pending"  onclick="setStatus('pending')">⏳ Pendiente</button>
-				<button class="status-btn progress" id="btn-progress" onclick="setStatus('progress')">🔧 En proceso</button>
-				<button class="status-btn done"     id="btn-done"     onclick="setStatus('done')">✅ Resuelto</button>
+				<button class="status-btn review"   id="btn-review"   onclick="setStatus('review')">🔍 En revisión</button>
+				<button class="status-btn progress" id="btn-progress" onclick="setStatus('progress')">🚧 En reparación</button>
+				<button class="status-btn done"     id="btn-done"     onclick="setStatus('done')">✅ Reparado</button>
+				<button class="status-btn rejected" id="btn-rejected" onclick="setStatus('rejected')">✖ Rechazado</button>
 			</div>
 
 			<!-- Zona de eliminación — solo visible cuando status = done -->
 			<div class="delete-zone" id="delete-zone">
-				<p class="delete-hint">Este reporte está <strong>resuelto o rechazado</strong>. Puedes eliminarlo permanentemente de la base de datos.</p>
+				<p class="delete-hint">Este reporte está <strong>reparado o rechazado</strong>. Puedes eliminarlo permanentemente de la base de datos.</p>
 				<button class="btn-delete" onclick="promptDelete()">🗑️ Eliminar reporte</button>
 				<div class="confirm-zone" id="confirm-zone">
 					<p class="confirm-msg">¿Confirmar eliminación? Esta acción <strong>no se puede deshacer</strong> y borrará el reporte, su historial y sus fotos.</p>

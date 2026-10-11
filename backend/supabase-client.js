@@ -23,16 +23,17 @@ export function isSupabaseReady() {
 export const SEV_DB_A_WEB = { baja: "leve", media: "moderado", alta: "critico" };
 export const SEV_WEB_A_DB = { leve: "baja", moderado: "media", critico: "alta" };
 
-// Estado: la BD tiene 5 estados; la web agrupa en 3 (+ rechazado)
+// Estado: los mismos 5 estados en la BD, la app y la web
 export const ESTADO_DB_A_WEB = {
     pendiente:     "pending",
-    en_revision:   "progress",
+    en_revision:   "review",
     en_reparacion: "progress",
     reparado:      "done",
     rechazado:     "rejected"
 };
 export const ESTADO_WEB_A_DB = {
     pending:  "pendiente",
+    review:   "en_revision",
     progress: "en_reparacion",
     done:     "reparado",
     rejected: "rechazado"

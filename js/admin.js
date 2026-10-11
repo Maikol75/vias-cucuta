@@ -15,8 +15,9 @@ import {
 
 /* ──────────── CONSTANTES ──────────── */
 const CUCUTA       = [7.8939, -72.5078];
-const SEV_LABEL    = { critico:'🔴 Crítico', moderado:'🟠 Moderado', leve:'🟡 Leve' };
-const STATUS_LABEL = { pending:'Pendiente', progress:'En proceso', done:'Resuelto', rejected:'Rechazado' };
+const SEV_LABEL    = { critico:'🔴 Crítico', moderado:'🟠 Moderado', leve:'🟢 Leve' };
+// Mismos 5 estados y nombres que la app móvil
+const STATUS_LABEL = { pending:'Pendiente', review:'En revisión', progress:'En reparación', done:'Reparado', rejected:'Rechazado' };
 // Colores de severidad — deben coincidir con las variables --coral/--gold/--green de admin.css
 const SEVER_COLOR  = { critico:'#F0384F', moderado:'#FFA726', leve:'#2FD480' };
 // Peso de cada severidad para la intensidad del mapa de calor
@@ -280,7 +281,7 @@ function flyToReport(lat, lng) {
 function updateStats() {
     animateNumber('s-total',    allReports.length);
     animateNumber('s-pending',  allReports.filter(r => r.status === 'pending').length);
-    animateNumber('s-progress', allReports.filter(r => r.status === 'progress').length);
+    animateNumber('s-progress', allReports.filter(r => r.status === 'review' || r.status === 'progress').length);
     animateNumber('s-done',     allReports.filter(r => r.status === 'done').length);
     updateAvgResolutionStat();
 }
@@ -488,7 +489,7 @@ function openModal(id) {
         photosSection.style.display = 'none';
     }
 
-    ['pending', 'progress', 'done'].forEach(s => {
+    ['pending', 'review', 'progress', 'done', 'rejected'].forEach(s => {
         document.getElementById('btn-' + s).classList.toggle('current', r.status === s);
     });
 

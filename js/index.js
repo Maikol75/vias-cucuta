@@ -17,9 +17,11 @@ import { geocodeAddress, reverseGeocode } from "../backend/geocoding-service.js"
 const CUCUTA = [7.8939, -72.5078];
 // Colores de severidad — deben coincidir con las variables --coral/--gold/--green de index.css
 const SEVER_COLOR  = { critico:"#F0384F", moderado:"#FFA726", leve:"#2FD480" };
-const STATUS_LABEL = { pending:"Pendiente", progress:"En proceso", done:"Resuelto" };
-const STATUS_CLASS = { pending:"badge-pending", progress:"badge-progress", done:"badge-done" };
-const STATUS_LABEL_DUP = { pending:'⏳ Pendiente', progress:'🔧 En proceso' };
+// Mismos estados y nombres que la app móvil (los rechazados no se muestran al público)
+const STATUS_LABEL = { pending:"Pendiente", review:"En revisión", progress:"En reparación", done:"Reparado" };
+const STATUS_CLASS = { pending:"badge-pending", review:"badge-review", progress:"badge-progress", done:"badge-done" };
+const STATUS_LABEL_DUP = { pending:'⏳ Pendiente', review:'🔍 En revisión', progress:'🚧 En reparación' };
+const SEV_LABEL    = { critico:"Crítico", moderado:"Moderado", leve:"Leve" };
 
 // Validación de fotos antes de subirlas. Las fotos válidas se reducen en el
 // navegador (backend/reportes-service.js) antes de enviarlas a Supabase Storage.
@@ -274,7 +276,7 @@ function renderMarkers() {
             <div class="popup-title">${escHtml(r.type)}</div>
             <div class="popup-meta">📍 ${escHtml(r.address)}</div>
             <div class="popup-meta" style="margin-top:4px;">
-                <span style="color:${color};font-weight:700;">${escHtml(r.severity || "—")}</span>
+                <span style="color:${color};font-weight:700;">${SEV_LABEL[r.severity] || "—"}</span>
                 &nbsp;·&nbsp; ${STATUS_LABEL[r.status] || "Pendiente"}
             </div>
             <div style="margin-top:6px;font-size:.82rem;color:#EFE6E2;line-height:1.4;">${escHtml(r.desc || "")}</div>
@@ -560,7 +562,7 @@ function haversineMetros(lat1, lng1, lat2, lng2) {
 function buscarDuplicado(lat, lng, radioMetros = 50) {
     return allReports.find(r => {
         if (!r.lat || !r.lng) return false;
-        if (r.status !== 'pending' && r.status !== 'progress') return false;
+        if (!['pending', 'review', 'progress'].includes(r.status)) return false;
         return haversineMetros(lat, lng, r.lat, r.lng) <= radioMetros;
     }) || null;
 }
